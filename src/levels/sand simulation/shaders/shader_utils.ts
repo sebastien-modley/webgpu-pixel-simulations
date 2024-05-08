@@ -1,0 +1,25 @@
+export const pixelMaths = /*wgsl*/ `
+
+// static const vec2i neighbours_4[4] = {
+//             int2(0,-1),
+//     int2(-1,0),     int2(1,0), 
+//             int2(0,1)
+// };
+
+// int2 neighbourV(int neighbourIndex) {
+// return neighbours_4[neighbourIndex];
+// }
+
+// fn neighbourArrayIndex(pos: vec2i) -> i32 {
+//     //index in neighbours_4
+//     return (pos.y>=0) + (pos.x==1) + (pos.y==1)*4;
+// }
+
+
+// int neighbourArrayIndex(int3 pos, int num_neighbours) {
+// int index = num_neighbours == 6 ? (pos.z>=0) + (pos.z==1)*4 + (pos.z==0) * ((pos.x!=0) + (pos.x>0) + (pos.y>0)*3) :
+// (pos.z+1) * 9 + (pos.y+1) * 3 + (pos.x+1);
+// return num_neighbours == 6 ? index : index - (index >= 13);
+// }
+
+`;
