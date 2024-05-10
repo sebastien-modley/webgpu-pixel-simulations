@@ -1,5 +1,16 @@
 export const pixelMaths = /*wgsl*/ `
 
+fn posMod_u(a:u32, b:u32) -> u32{
+    let m = a % b;
+    return select(m + abs(b), m, m >= 0);
+}
+
+//note: wraps around on both dimensions
+fn cellIndex(cell: vec2u) -> u32 {
+    return posMod_u(cell.y, u32(grid.y)) * u32(grid.x) + posMod_u(cell.x, u32(grid.x));
+}
+
+
 // static const vec2i neighbours_4[4] = {
 //             int2(0,-1),
 //     int2(-1,0),     int2(1,0), 

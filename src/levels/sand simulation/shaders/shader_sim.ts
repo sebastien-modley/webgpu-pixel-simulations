@@ -6,18 +6,22 @@ export default function shader_simulation(
 ) {
     return /* wgsl */ `
         //includes
+        ${pixelMaths}
 
-        @group(0) @binding(0) var<uniform> grid:vec2f;
-        
-        //1 for each cell
-        @group(0) @binding(1) var<storage> cellStateIn: array<u32>;
-        //5 for each cell (itself + each side neighbour)
-        @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
+        fn empty_cellStateIntentTemp(i: u32) {
+            cellStateIntentTemp[i * 5] = 0;
+            cellStateIntentTemp[i * 5 + 1] = 0;
+            cellStateIntentTemp[i * 5 + 2] = 0;
+            cellStateIntentTemp[i * 5 + 3] = 0;
+            cellStateIntentTemp[i * 5 + 4] = 0;
+        }
 
-
-        //helpers
-        fn cellIndex(cell: vec2u) -> u32 {
-            return (cell.y % u32(grid.y)) * u32(grid.x) + (cell.x % u32(grid.x));
+        fn empty_cellStateKeepingTemp(i: u32) {
+            cellStateKeepingTemp[i * 5] = 0;
+            cellStateKeepingTemp[i * 5 + 1] = 0;
+            cellStateKeepingTemp[i * 5 + 2] = 0;
+            cellStateKeepingTemp[i * 5 + 3] = 0;
+            cellStateKeepingTemp[i * 5 + 4] = 0;
         }
 
         fn cellValue(x: u32, y: u32) -> u32 {
@@ -25,57 +29,79 @@ export default function shader_simulation(
             return cellStateIn[cellIndex(vec2u(x,y))];
         }
 
-        // fn emptyCellStateIntent(i: u32) {
-        //     // cellStateIntentOut[i * 5] = 0;
-        //     // cellStateIntentOut[i * 5 + 1] = 0;
-        //     // cellStateIntentOut[i * 5 + 2] = 0;
-        //     // cellStateIntentOut[i * 5 + 3] = 0;
-        //     // cellStateIntentOut[i * 5 + 4] = 0;
-        // }
+        fn cellIntentIndex(i:u32, offset:vec2i) -> u32 {
+            return i*5 + 
+                u32(1 * abs(offset.x) + max(offset.x, 0)) +
+                u32(3 * abs(offset.y) + max(offset.y, 0))
+            ;
+        }
+        fn cellKeepingIndex(i:u32, offset:vec2i) -> u32 {
+            return cellIntentIndex(i, offset);
+        }
+
+        //grid dimensions
+        @group(0) @binding(0) var<uniform> grid:vec2f; 
+        //1 for each cell
+        @group(0) @binding(1) var<storage> cellStateIn: array<u32>;
+        @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
+        //5 for each cell (itself + each side neighbour)
+        @group(0) @binding(3) var<storage, read_write> cellStateIntentTemp: array<u32>;
+        @group(0) @binding(4) var<storage, read_write> cellStateKeepingTemp: array<u32>;
 
 
         @compute
         @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE}, 1)
-        fn computeMain(
+        fn compute_push(
             @builtin(global_invocation_id) cell: vec3u
         ) {
+            //setup
+            let i = cellIndex(cell.xy);
+            empty_cellStateIntentTemp(i);
+
+            //empty? do nothing!
+            if cellValue(cell.x, cell.y) == 0 {
+                return;
+            }
+
+            //bottom empty - declare intent!
+            if cellValue(cell.x, cell.y - 1) == 0 {
+                cellStateIntentTemp[cellIntentIndex(i, vec2i(0, -1))] = 1;
+            }
+            else {
+                cellStateIntentTemp[cellIntentIndex(i, vec2i(0,0))] = 1;
+            }
+            //todo: left empty? / right empty?
+        }
+
+        @compute
+        @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE}, 1)
+        fn compute_pull(
+            @builtin(global_invocation_id) cell: vec3u
+        ) {
+            //setup
+            let i = cellIndex(cell.xy);
+            empty_cellStateKeepingTemp(i);
+            
+            if cellStateIntentTemp[cellIntentIndex(i, vec2i(0,0))] == 1 {
+                return; //we're staying in place
+            }
+
+            let i_top = cellIndex(vec2u(cell.x, cell.y+1));
+            if cellStateIntentTemp[cellIntentIndex(i_top, vec2i(0,-1))] == 1 {
+                cellStateIntentTemp[cellIntentIndex(i_top, vec2i(0,-1))] = 0;
+                cellStateKeepingTemp[cellKeepingIndex(i, vec2i(0,1))] = 1;
+            }
+        }
+
+        @compute
+        @workgroup_size(${WORKGROUP_SIZE}, ${WORKGROUP_SIZE}, 1)
+        fn compute_update(
+            @builtin(global_invocation_id) cell: vec3u
+        ) {
+            //setup
             let i = cellIndex(cell.xy);
 
-            switch cellValue(cell.x, cell.y) {
-                case 1: { // cell active
-                    switch cellValue(cell.x, cell.y - 1) {
-                        case 0: { // bottom inactive - swap
-                            cellStateOut[i] = 0;
-                            cellStateOut[cellIndex(vec2u(cell.x, cell.y-1))] = 1;
-                        }
-                        case 1: { // bottom active (or out-of-bounds) - stay
-                            cellStateOut[i] = 1;
-                        }
-                        default: {}
-                    }
-                }
-                case 0: { // cell inactive
-                    if (
-                        cellValue(cell.x, cell.y - 1) == 0
-                    &&  cell.y >= 0
-                    ) { // bottom inactive - keep it so (for synchronisation)
-                        cellStateOut[cellIndex(vec2u(cell.x, cell.y-1))] = 0;
-                    }
-                    if (cell.y == u32(grid.y) - 1) {
-                        cellStateOut[i] = 0; //no-one else will reset me because I'm at the top
-                    }
-                }
-                default: {}
-            }            
-            // let isActive = cellValue(cell.x, cell.y) == 1;
-            // let isBelowActive = cellValue(cell.x, cell.y - 1) == 1;
-            // if (isActive) {
-            //     cellStateOut[i] = select(0u,1u, isBelowActive);
-            //     // cellStateOut[cellIndex(vec2u(cell.x, cell.y-1))] = select(0u, 1u, isBelowActive);    
-            // }
-            // else {
-
-            // }
+            cellStateOut[i] = cellStateIntentTemp[cellIntentIndex(i, vec2i(0,0))] + cellStateKeepingTemp[cellKeepingIndex(i, vec2i(0,1))];
         }
     `;
 }

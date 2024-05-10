@@ -1,9 +1,14 @@
 import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 
-const GRID_SIZE = 512;
-const UPDATE_INTERVAL = 16.66667 / 4; //ms
+const GRID_SIZE = 128;
+const UPDATE_INTERVAL = 16.66667; //ms
 const WORKGROUP_SIZE = 8;
+const LOGS_ENABLED = false;
+
+function log(s: string) {
+    if (LOGS_ENABLED) console.log(s);
+}
 
 function run(
     device: GPUDevice,
@@ -36,8 +41,23 @@ function run(
     ];
     for (let i = 0; i < cellStateArray.length; ++i)
         cellStateArray[i] = Math.random() > 0.65 ? 1 : 0;
-
     device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
+
+    const intermediateCellStateArray = new Uint32Array(
+        GRID_SIZE * GRID_SIZE * 5
+    );
+    const intermediateCellStateStorage = [
+        device.createBuffer({
+            label: "Cell State Intent Temp",
+            size: intermediateCellStateArray.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        }),
+        device.createBuffer({
+            label: "Cell State Keeping Temp",
+            size: intermediateCellStateArray.byteLength,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        }),
+    ];
 
     const cellShaderModule = device.createShaderModule({
         label: "Visuals shader",
@@ -71,6 +91,16 @@ function run(
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }, // Cell state output buffer
             },
+            {
+                binding: 3,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }, //intent temp
+            },
+            {
+                binding: 4,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: { type: "storage" }, //keeping temp
+            },
         ],
     });
 
@@ -92,6 +122,14 @@ function run(
                     binding: 2,
                     resource: { buffer: cellStateStorage[1] },
                 },
+                {
+                    binding: 3,
+                    resource: { buffer: intermediateCellStateStorage[0] },
+                },
+                {
+                    binding: 4,
+                    resource: { buffer: intermediateCellStateStorage[1] },
+                },
             ],
         }),
         device.createBindGroup({
@@ -110,6 +148,14 @@ function run(
                 {
                     binding: 2,
                     resource: { buffer: cellStateStorage[0] },
+                },
+                {
+                    binding: 3,
+                    resource: { buffer: intermediateCellStateStorage[0] },
+                },
+                {
+                    binding: 4,
+                    resource: { buffer: intermediateCellStateStorage[1] },
                 },
             ],
         }),
@@ -141,33 +187,61 @@ function run(
         },
     });
 
-    const simulationPipeline = device.createComputePipeline({
-        label: "Simulation pipeline",
-        layout: pipelineLayout,
-        compute: {
-            module: simulationShaderModule,
-            entryPoint: "computeMain",
-        },
-    });
+    const simulationPipelines = {
+        push: device.createComputePipeline({
+            label: "Simulation pipeline: push",
+            layout: pipelineLayout,
+            compute: {
+                module: simulationShaderModule,
+                entryPoint: "compute_push",
+            },
+        }),
+        pull: device.createComputePipeline({
+            label: "Simulation pipeline: pull",
+            layout: pipelineLayout,
+            compute: {
+                module: simulationShaderModule,
+                entryPoint: "compute_pull",
+            },
+        }),
+        update: device.createComputePipeline({
+            label: "Simulation pipeline: update",
+            layout: pipelineLayout,
+            compute: {
+                module: simulationShaderModule,
+                entryPoint: "compute_update",
+            },
+        }),
+    };
 
     let previousFrameTime = window.performance.now();
     let simulationStep = 0;
     updateGrid();
 
+    function runComputePass(encoder: GPUCommandEncoder) {
+        const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
+        const computePass = encoder.beginComputePass();
+        computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
+
+        computePass.setPipeline(simulationPipelines.push);
+        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+
+        computePass.setPipeline(simulationPipelines.pull);
+        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+
+        computePass.setPipeline(simulationPipelines.update);
+        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+
+        computePass.end();
+    }
+
     async function updateGrid() {
-        console.log(
-            `fps: ${1000 / (window.performance.now() - previousFrameTime)}`
-        );
+        log(`fps: ${1000 / (window.performance.now() - previousFrameTime)}`);
         previousFrameTime = window.performance.now();
 
         const encoder = device.createCommandEncoder();
-        const computePass = encoder.beginComputePass();
-        computePass.setPipeline(simulationPipeline);
-        computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
 
-        const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
-        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
-        computePass.end();
+        runComputePass(encoder);
 
         simulationStep++;
 
@@ -194,7 +268,7 @@ function run(
         device.queue.submit([encoder.finish()]);
         await device.queue.onSubmittedWorkDone();
         var timeDiff = window.performance.now() - previousFrameTime;
-        console.log(`calc time: ${timeDiff} (budget: ${UPDATE_INTERVAL})`);
+        log(`calc time: ${timeDiff} (budget: ${UPDATE_INTERVAL})`);
 
         UPDATE_INTERVAL <= 0
             ? updateGrid()
