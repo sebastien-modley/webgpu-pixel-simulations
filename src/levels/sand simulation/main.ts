@@ -40,11 +40,11 @@ function run(
         }),
     ];
     for (let i = 0; i < cellStateArray.length; ++i)
-        cellStateArray[i] = Math.random() > 0.65 ? 1 : 0;
+        cellStateArray[i] = Math.random() > 0.99 ? 1 : 0;
     device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
 
     const intermediateCellStateArray = new Uint32Array(
-        GRID_SIZE * GRID_SIZE * 5
+        GRID_SIZE * GRID_SIZE * 9
     );
     const intermediateCellStateStorage = [
         device.createBuffer({

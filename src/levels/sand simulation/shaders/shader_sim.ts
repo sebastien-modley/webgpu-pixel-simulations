@@ -9,19 +9,15 @@ export default function shader_simulation(
         ${pixelMaths}
 
         fn empty_cellStateIntentTemp(i: u32) {
-            cellStateIntentTemp[i * 5] = 0;
-            cellStateIntentTemp[i * 5 + 1] = 0;
-            cellStateIntentTemp[i * 5 + 2] = 0;
-            cellStateIntentTemp[i * 5 + 3] = 0;
-            cellStateIntentTemp[i * 5 + 4] = 0;
+            for (var j = 0u; j < 9u; j++) {
+                cellStateIntentTemp[i * 9 + j] = 0;
+            }
         }
 
         fn empty_cellStateKeepingTemp(i: u32) {
-            cellStateKeepingTemp[i * 5] = 0;
-            cellStateKeepingTemp[i * 5 + 1] = 0;
-            cellStateKeepingTemp[i * 5 + 2] = 0;
-            cellStateKeepingTemp[i * 5 + 3] = 0;
-            cellStateKeepingTemp[i * 5 + 4] = 0;
+            for (var j = 0u; j < 9u; j++) {
+                cellStateKeepingTemp[i * 9 + j] = 0;
+            }
         }
 
         fn cellValue(x: u32, y: u32) -> u32 {
@@ -30,10 +26,8 @@ export default function shader_simulation(
         }
 
         fn cellIntentIndex(i:u32, offset:vec2i) -> u32 {
-            return i*5 + 
-                u32(1 * abs(offset.x) + max(offset.x, 0)) +
-                u32(3 * abs(offset.y) + max(offset.y, 0))
-            ;
+            let offsetIndex = u32(offset.y+1) * 3 + u32(offset.x+1);
+            return i*9 + offsetIndex;
         }
         fn cellKeepingIndex(i:u32, offset:vec2i) -> u32 {
             return cellIntentIndex(i, offset);
@@ -45,6 +39,7 @@ export default function shader_simulation(
         @group(0) @binding(1) var<storage> cellStateIn: array<u32>;
         @group(0) @binding(2) var<storage, read_write> cellStateOut: array<u32>;
         //5 for each cell (itself + each side neighbour)
+        //9 for each cell (itself + each neighbour)
         @group(0) @binding(3) var<storage, read_write> cellStateIntentTemp: array<u32>;
         @group(0) @binding(4) var<storage, read_write> cellStateKeepingTemp: array<u32>;
 
