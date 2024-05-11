@@ -1,7 +1,7 @@
 import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 
-const GRID_SIZE = 128;
+const GRID_SIZE = 256;
 const UPDATE_INTERVAL = 16.66667; //ms
 const WORKGROUP_SIZE = 8;
 const LOGS_ENABLED = false;
@@ -40,7 +40,7 @@ function run(
         }),
     ];
     for (let i = 0; i < cellStateArray.length; ++i)
-        cellStateArray[i] = Math.random() > 0.99 ? 1 : 0;
+        cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
     device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
 
     const intermediateCellStateArray = new Uint32Array(

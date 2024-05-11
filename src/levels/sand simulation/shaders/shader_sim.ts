@@ -62,6 +62,12 @@ export default function shader_simulation(
             if cellValue(cell.x, cell.y - 1) == 0 {
                 cellStateIntentTemp[cellIntentIndex(i, vec2i(0, -1))] = 1;
             }
+            else if cellValue(cell.x+1, cell.y - 1) == 0 {
+                cellStateIntentTemp[cellIntentIndex(i, vec2i(1,-1))] = 1;
+            }
+            else if cellValue(cell.x-1, cell.y - 1) == 0 {
+                cellStateIntentTemp[cellIntentIndex(i, vec2i(-1,-1))] = 1;
+            }
             else {
                 cellStateIntentTemp[cellIntentIndex(i, vec2i(0,0))] = 1;
             }
@@ -82,10 +88,21 @@ export default function shader_simulation(
             }
 
             let i_top = cellIndex(vec2u(cell.x, cell.y+1));
+            let i_top_left = cellIndex(vec2u(cell.x-1, cell.y+1));
+            let i_top_right = cellIndex(vec2u(cell.x+1, cell.y+1));
             if cellStateIntentTemp[cellIntentIndex(i_top, vec2i(0,-1))] == 1 {
                 cellStateIntentTemp[cellIntentIndex(i_top, vec2i(0,-1))] = 0;
                 cellStateKeepingTemp[cellKeepingIndex(i, vec2i(0,1))] = 1;
             }
+            else if cellStateIntentTemp[cellIntentIndex(i_top_left, vec2i(1,-1))] == 1 {
+                cellStateIntentTemp[cellIntentIndex(i_top_left, vec2i(1,-1))] = 0;
+                cellStateKeepingTemp[cellKeepingIndex(i, vec2i(-1,1))] = 1;
+            }
+            else if cellStateIntentTemp[cellIntentIndex(i_top_right, vec2i(-1,-1))] == 1 {
+                cellStateIntentTemp[cellIntentIndex(i_top_right, vec2i(-1,-1))] = 0;
+                cellStateKeepingTemp[cellKeepingIndex(i, vec2i(1,1))] = 1;
+            }
+            
         }
 
         @compute
@@ -96,7 +113,7 @@ export default function shader_simulation(
             //setup
             let i = cellIndex(cell.xy);
 
-            cellStateOut[i] = cellStateIntentTemp[cellIntentIndex(i, vec2i(0,0))] + cellStateKeepingTemp[cellKeepingIndex(i, vec2i(0,1))];
+            cellStateOut[i] = cellStateIntentTemp[cellIntentIndex(i, vec2i(0,0))] + cellStateIntentTemp[cellIntentIndex(i, vec2i(1,-1))] + cellStateIntentTemp[cellIntentIndex(i, vec2i(-1,-1))] + cellStateKeepingTemp[cellKeepingIndex(i, vec2i(0,1))] + cellStateKeepingTemp[cellKeepingIndex(i, vec2i(-1,1))] + cellStateKeepingTemp[cellKeepingIndex(i, vec2i(1,1))];
         }
     `;
 }
