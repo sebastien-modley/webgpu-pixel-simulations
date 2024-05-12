@@ -1,10 +1,11 @@
 import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 
-const GRID_SIZE = 256;
-const UPDATE_INTERVAL = 16.66667; //ms
+const GRID_SIZE = 128;
+const UPDATE_INTERVAL = -1; //16.66667 / 32; //ms
 const WORKGROUP_SIZE = 8;
 const LOGS_ENABLED = false;
+const RENDERING_ENABLED = true;
 
 function log(s: string) {
     if (LOGS_ENABLED) console.log(s);
@@ -39,8 +40,13 @@ function run(
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         }),
     ];
-    for (let i = 0; i < cellStateArray.length; ++i)
-        cellStateArray[i] = Math.random() > 0.6 ? 1 : 0;
+    for (let i = 0; i < cellStateArray.length; ++i) {
+        const x = i % GRID_SIZE;
+        const y = i / GRID_SIZE;
+        const distFromMiddle =
+            Math.abs(x - GRID_SIZE / 2) + Math.abs(y - GRID_SIZE / 2);
+        cellStateArray[i] = Math.random() > distFromMiddle / GRID_SIZE ? 1 : 0;
+    }
     device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
 
     const intermediateCellStateArray = new Uint32Array(
@@ -218,7 +224,7 @@ function run(
     let simulationStep = 0;
     updateGrid();
 
-    function runComputePass(encoder: GPUCommandEncoder) {
+    function dispatchComputePass(encoder: GPUCommandEncoder) {
         const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
         const computePass = encoder.beginComputePass();
         computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
@@ -241,44 +247,41 @@ function run(
 
         const encoder = device.createCommandEncoder();
 
-        runComputePass(encoder);
+        dispatchComputePass(encoder);
 
         simulationStep++;
 
         // Start a render pass
-        const pass = encoder.beginRenderPass({
-            colorAttachments: [
-                {
-                    view: context.getCurrentTexture().createView(),
-                    loadOp: "clear",
-                    storeOp: "store",
-                    clearValue: [0, 0, 0.4, 1], //background color
-                },
-            ],
-        });
-        // Draw the grid.
-        pass.setPipeline(cellPipeline);
-        pass.setVertexBuffer(0, vertexBuffer);
+        if (RENDERING_ENABLED) {
+            const pass = encoder.beginRenderPass({
+                colorAttachments: [
+                    {
+                        view: context.getCurrentTexture().createView(),
+                        loadOp: "clear",
+                        storeOp: "store",
+                        clearValue: [0, 0, 0.4, 1], //background color
+                    },
+                ],
+            });
+            // Draw the grid.
+            pass.setPipeline(cellPipeline);
+            pass.setVertexBuffer(0, vertexBuffer);
 
-        pass.setBindGroup(0 /*@group(0)*/, bindGroups[simulationStep % 2]);
+            pass.setBindGroup(0 /*@group(0)*/, bindGroups[simulationStep % 2]);
 
-        pass.draw(vertices.length / 2, /*instances=*/ GRID_SIZE * GRID_SIZE);
-        // Finish the render pass and immediately submit it.
-        pass.end();
+            pass.draw(
+                vertices.length / 2,
+                /*instances=*/ GRID_SIZE * GRID_SIZE
+            );
+            // Finish the render pass and immediately submit it.
+            pass.end();
+        }
         device.queue.submit([encoder.finish()]);
         await device.queue.onSubmittedWorkDone();
         var timeDiff = window.performance.now() - previousFrameTime;
         log(`calc time: ${timeDiff} (budget: ${UPDATE_INTERVAL})`);
 
-        UPDATE_INTERVAL <= 0
-            ? updateGrid()
-            : setTimeout(
-                  () => updateGrid(),
-                  Math.max(0, UPDATE_INTERVAL - timeDiff)
-              );
-        if (UPDATE_INTERVAL <= 0) {
-            updateGrid();
-        }
+        setTimeout(() => updateGrid(), Math.max(0, UPDATE_INTERVAL - timeDiff));
     }
 }
 
