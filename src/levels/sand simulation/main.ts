@@ -1,15 +1,16 @@
+import { StatLogger } from "../../utils/StatLogger";
 import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 
 const GRID_SIZE = 128;
-const UPDATE_INTERVAL = -1; //16.66667 / 32; //ms
-const WORKGROUP_SIZE = 8;
-const LOGS_ENABLED = false;
+const UPDATE_INTERVAL = 16.66667; //ms
+const WORKGROUP_SIZE = 4;
+const LOGS_ENABLED = true;
+const LOG_EVERY_X_FRAMES = 120;
 const RENDERING_ENABLED = true;
+const ITERATIONS_PER_FRAME = 1;
 
-function log(s: string) {
-    if (LOGS_ENABLED) console.log(s);
-}
+const statLogger = new StatLogger(LOG_EVERY_X_FRAMES);
 
 function run(
     device: GPUDevice,
@@ -80,7 +81,6 @@ function run(
         entries: [
             {
                 binding: 0,
-                // Add GPUShaderStage.FRAGMENT here if you are using the `grid` uniform in the fragment shader.
                 visibility:
                     GPUShaderStage.VERTEX |
                     GPUShaderStage.FRAGMENT |
@@ -110,7 +110,6 @@ function run(
         ],
     });
 
-    // Create a bind group to pass the grid uniforms into the pipeline
     const bindGroups = [
         device.createBindGroup({
             label: "Cell renderer bind group A",
@@ -222,27 +221,40 @@ function run(
 
     let previousFrameTime = window.performance.now();
     let simulationStep = 0;
+    let frames = 0;
+    let averageMs = 0;
+    let averageFrames = 0;
     updateGrid();
 
     function dispatchComputePass(encoder: GPUCommandEncoder) {
         const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
         const computePass = encoder.beginComputePass();
-        computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
 
-        computePass.setPipeline(simulationPipelines.push);
-        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+        for (let i = 0; i < ITERATIONS_PER_FRAME; i++) {
+            if (i > 0) {
+                simulationStep++;
+            }
+            computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
 
-        computePass.setPipeline(simulationPipelines.pull);
-        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+            computePass.setPipeline(simulationPipelines.push);
+            computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
 
-        computePass.setPipeline(simulationPipelines.update);
-        computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+            computePass.setPipeline(simulationPipelines.pull);
+            computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+
+            computePass.setPipeline(simulationPipelines.update);
+            computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+        }
 
         computePass.end();
     }
 
     async function updateGrid() {
-        log(`fps: ${1000 / (window.performance.now() - previousFrameTime)}`);
+        statLogger.log(
+            "fps",
+            1000 / (window.performance.now() - previousFrameTime)
+        );
+
         previousFrameTime = window.performance.now();
 
         const encoder = device.createCommandEncoder();
@@ -250,6 +262,7 @@ function run(
         dispatchComputePass(encoder);
 
         simulationStep++;
+        frames++;
 
         // Start a render pass
         if (RENDERING_ENABLED) {
@@ -267,19 +280,19 @@ function run(
             pass.setPipeline(cellPipeline);
             pass.setVertexBuffer(0, vertexBuffer);
 
-            pass.setBindGroup(0 /*@group(0)*/, bindGroups[simulationStep % 2]);
+            pass.setBindGroup(0, bindGroups[simulationStep % 2]);
 
             pass.draw(
                 vertices.length / 2,
                 /*instances=*/ GRID_SIZE * GRID_SIZE
             );
-            // Finish the render pass and immediately submit it.
             pass.end();
         }
         device.queue.submit([encoder.finish()]);
         await device.queue.onSubmittedWorkDone();
-        var timeDiff = window.performance.now() - previousFrameTime;
-        log(`calc time: ${timeDiff} (budget: ${UPDATE_INTERVAL})`);
+
+        const timeDiff = window.performance.now() - previousFrameTime;
+        statLogger.log("calc time", timeDiff);
 
         setTimeout(() => updateGrid(), Math.max(0, UPDATE_INTERVAL - timeDiff));
     }
@@ -289,10 +302,8 @@ export default run;
 
 function _createVertexBuffer(device: GPUDevice) {
     const vertices = new Float32Array([
-        //triangle 1 (Blue)
         -1.0, -1.0, 1.0, -1.0, 1.0, 1.0,
 
-        //triangle 2 (Red)
         -1.0, -1.0, 1.0, 1.0, -1.0, 1.0,
     ]);
     const vertexBuffer = device.createBuffer({
@@ -300,14 +311,14 @@ function _createVertexBuffer(device: GPUDevice) {
         size: vertices.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(vertexBuffer, /*bufferOffset=*/ 0, vertices);
+    device.queue.writeBuffer(vertexBuffer, 0, vertices);
     const vertexBufferLayout: GPUVertexBufferLayout = {
         arrayStride: vertices.BYTES_PER_ELEMENT * 2,
         attributes: [
             {
                 format: "float32x2", //each vertex is 2 floats: (x,y)
                 offset: 0,
-                shaderLocation: 0, // Position, see vertex shader: [0,15]
+                shaderLocation: 0,
             },
         ],
     };
