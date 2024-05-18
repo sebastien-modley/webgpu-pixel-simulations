@@ -2,7 +2,7 @@ import { StatLogger } from "../../utils/StatLogger";
 import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 
-const GRID_SIZE = 128;
+const GRID_SIZE = 1024;
 const UPDATE_INTERVAL = 16.66667; //ms
 const WORKGROUP_SIZE = 4;
 const LOGS_ENABLED = true;

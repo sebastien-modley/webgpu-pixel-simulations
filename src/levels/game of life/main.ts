@@ -1,5 +1,7 @@
-const GRID_SIZE = 4;
-const UPDATE_INTERVAL = 600; //ms
+import { StatLogger } from "../../utils/StatLogger";
+
+const GRID_SIZE = 1024;
+const UPDATE_INTERVAL = 16.6667; //ms
 const WORKGROUP_SIZE = 8;
 
 function run(
@@ -151,16 +153,7 @@ function run(
                 @builtin(global_invocation_id) cell: vec3u
             ) {
                 let i = cellIndex(cell.xy);
-                switch cellActive(cell.x, cell.y) {
-                    case 1: {
-                        cellStateOut[i] = cellActive(cell.x, cell.y - 1);
-                    }
-                    case 0: {
-                        cellStateOut[i] = 0;
-                    }
-                    default: {}
-                }
-                // cellStateOut[i] = nextState(cell.x, cell.y, i);
+                cellStateOut[i] = nextState(cell.x, cell.y, i);
             }
         `,
     });
@@ -265,9 +258,19 @@ function run(
     });
 
     let simulationStep = 0;
+
+    let previousFrameTime = window.performance.now();
+    const logger = new StatLogger(120);
+
     setInterval(updateGrid, UPDATE_INTERVAL);
 
-    function updateGrid() {
+    async function updateGrid() {
+        logger.log(
+            "fps",
+            1000 / (window.performance.now() - previousFrameTime)
+        );
+        previousFrameTime = window.performance.now();
+
         const encoder = device.createCommandEncoder();
         const computePass = encoder.beginComputePass();
         computePass.setPipeline(simulationPipeline);
@@ -300,6 +303,10 @@ function run(
         // Finish the render pass and immediately submit it.
         pass.end();
         device.queue.submit([encoder.finish()]);
+        await device.queue.onSubmittedWorkDone();
+
+        const timeDiff = window.performance.now() - previousFrameTime;
+        logger.log("calc time", timeDiff);
     }
 }
 
