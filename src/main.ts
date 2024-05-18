@@ -1,6 +1,6 @@
 import { Pane } from "tweakpane";
 import { reportToUser } from "./utils/util";
-import run from "./levels/sand simulation/main";
+import run from "./levels/doom fire/main";
 
 const canvas = document.querySelector("canvas");
 canvas.width = 300;
