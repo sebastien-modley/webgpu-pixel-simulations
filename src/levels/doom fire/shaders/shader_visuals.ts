@@ -56,15 +56,18 @@ export default function shader_visuals(): string {
 
 
             fn calculateRawFireColor(state: f32) -> vec4f {
-                const checkPointCount = 4;
+                const checkPointCount = 7;
                 const colors = array<vec4f, checkPointCount>(
-                    vec4f(0.29, 0.1, 0.07, 1), 
-                    vec4f(0.53, 0.17, 0.03, 1),
-                    vec4f(0.96, 0.44, 0.12, 1), 
-                    vec4f(0.98, 1, 0.7, 1), 
+                    vec4f(0.02f, 0.02f, 0.02f, 1f), 
+                    vec4f(0.37f, 0.1f, 0.02f, 1f),
+                    vec4f(0.62f, 0.22f, 0.02f, 1f),
+                    vec4f(0.65f, 0.4f, 0.05f, 1f),
+                    vec4f(0.62f, 0.47f, 0.1f, 1f),
+                    vec4f(0.57f, 0.57f, 0.17f, 1f), 
+                    vec4f(1f, 1f, 1f, 1f), 
                 );
                 const checkPoints = array<f32, checkPointCount-1>(
-                    10, 20, 30
+                    12, 16, 19, 24, 32, 36
                     // 0.05, 0.3, 1
                 );
 

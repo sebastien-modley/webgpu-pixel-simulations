@@ -63,18 +63,30 @@ export default function shader_simulation(
 
             empty_array(&neighbourhood_intent, i*9, 9);
 
+            let randf = rand11(f32(i)*time) * 2;
+            let randu1 = u32(round(randf));
+            let randu2 = u32(round((randf - trunc(randf)) * 10));
+
             var fireValue = cellValue(cell.x, cell.y) * 1.0;
-            if (cell.y == grid.y - 1) {fireValue = 36;}
+            fireValue = round(max(0, fireValue - f32(randu1 & 1u)));
+            if (cell.y ==0) {fireValue = 36;}
+            else if (isCloseToZero(fireValue)) {return;}
 
-            let rand = round(rand11(f32(i)*time) * 2);
 
-            neighbourhood_intent[mooreIndex(i, vec2i(0,1))] = round(max(0,fireValue - f32(u32(rand) & 1u)));
 
-            // let shareSum = shareUpLeft + shareUp + shareUpRight;
 
-            // neighbourhood_intent[mooreIndex(i, vec2i(-1,1))] = fireValue * shareUpLeft/shareSum;
-            // neighbourhood_intent[mooreIndex(i, vec2i(0,1))] = fireValue * shareUp/shareSum;
-            // neighbourhood_intent[mooreIndex(i, vec2i(1,1))] = fireValue * shareUpRight/shareSum;
+
+            var share_top = rand11(f32(i)*time*time);
+            var share_top_left = rand11((f32(i)-time)*time*time) * 4;
+            var share_top_right = rand11((f32(i)+time)*time*time) * 0.25;
+
+            
+
+            let share_sum = share_top + share_top_left + share_top_right;
+
+            neighbourhood_intent[mooreIndex(i, vec2i(-1,1))] = fireValue * (share_top_left/share_sum);
+            neighbourhood_intent[mooreIndex(i, vec2i(0,1))] = fireValue * (share_top/share_sum);
+            neighbourhood_intent[mooreIndex(i, vec2i(1,1))] = fireValue * (share_top_right/share_sum);
         }
 
         @compute
@@ -87,10 +99,9 @@ export default function shader_simulation(
             if !computeCellValid(cell, grid) {return;}
     
             empty_array(&neighbourhood_maintain, i*9, 9);
-            
+
             for (var x = -1; x <= 1; x++) {
                 for (var y = -1; y <= 1; y++) {
-                    if !isWithinBounds(cell.xy, grid) {continue;}
                     let i_neighbour = cellIndex(getOffset(cell.xy, vec2i(x, y)));
                     neighbourhood_maintain[mooreIndex(i, vec2i(x, y))] = neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))];
                     neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))] = 0;
