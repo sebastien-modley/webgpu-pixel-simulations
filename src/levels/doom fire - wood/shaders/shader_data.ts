@@ -1,8 +1,8 @@
 export const shader_data = /* wgsl */ `
 
     struct Pixel {
-        isWood:u32,
-        fireValue:f32,
+        wood:f32,
+        fire:f32,
     };
 
     //grid dimensions

@@ -24,23 +24,6 @@ function run(
     context: GPUCanvasContext,
     canvasFormat: GPUTextureFormat
 ) {
-    // Create a uniform buffer that describes the grid.
-
-    // const timeData = new Float32Array([window.performance.now()]);
-    // const timeUniform = device.createBuffer({
-    //     label: "Time Uniform",
-    //     size: timeData.byteLength,
-    //     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    // });
-    // device.queue.writeBuffer(timeUniform, 0, timeData);
-    // const gridData = new Uint32Array([GRID_SIZE, GRID_SIZE]);
-    // const gridUniform = device.createBuffer({
-    //     label: "Grid Uniforms",
-    //     size: gridData.byteLength,
-    //     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    // });
-    // device.queue.writeBuffer(gridUniform, 0, gridData);
-
     const shaderDefs = makeShaderDataDefinitions(shader_data);
 
     const arrayBuffers = {
@@ -101,12 +84,6 @@ function run(
         ),
     };
 
-    console.log(shaderDefs.storages["neighbourhood_intent"]);
-
-    console.log(shaderDefs.storages["cellStateIn"]);
-
-    console.log(shaderDataObjects.neighbourhood_intent);
-
     const shaderDataUsages: { [key: string]: number } = {
         grid: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         time: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -124,7 +101,7 @@ function run(
     const cellStartData = Array(GRID_SIZE * GRID_SIZE);
     for (let x = 0; x < GRID_SIZE; x++) {
         cellStartData[(GRID_SIZE - 1) * GRID_SIZE + x] = {
-            fireValue: 36,
+            fire: 36,
         };
     }
     for (let x = 0; x < GRID_SIZE; x++) {
@@ -134,16 +111,11 @@ function run(
             y++
         ) {
             cellStartData[y * GRID_SIZE + x] = {
-                isWood: 1,
+                wood: 1,
             };
         }
     }
-    console.log(cellStartData);
     shaderDataObjects.cellStateIn.set(cellStartData);
-    // console.log(
-    //     Array(GRID_SIZE * GRID_SIZE * 9).fill({ isWood: 0, fireValue: 0 })
-    // );
-    // console.log(Array.isArray(shaderDataObjects.neighbourhood_intent.views));
 
     for (var shaderDataElementName in shaderDataObjects) {
         if (!shaderDataObjects.hasOwnProperty(shaderDataElementName)) continue;
@@ -172,38 +144,6 @@ function run(
     }
 
     console.log(shaderDataBuffers);
-
-    // Create a (resizable, compute-writable, shader-readable) storage buffer that stores the game state
-    // const cellStateArray = new Float32Array(GRID_SIZE * GRID_SIZE);
-    // const cellStateStorage = [
-    //     device.createBuffer({
-    //         label: "Cell State A",
-    //         size: cellStateArray.byteLength,
-    //         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    //     }),
-    //     device.createBuffer({
-    //         label: "Cell State B",
-    //         size: cellStateArray.byteLength,
-    //         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    //     }),
-    // ];
-    // device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
-
-    // const intermediateCellStateArray = new Float32Array(
-    //     GRID_SIZE * GRID_SIZE * 9
-    // );
-    // const intermediateCellStateStorage = [
-    //     device.createBuffer({
-    //         label: "Cell State Intent Temp",
-    //         size: intermediateCellStateArray.byteLength,
-    //         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    //     }),
-    //     device.createBuffer({
-    //         label: "Cell State Keeping Temp",
-    //         size: intermediateCellStateArray.byteLength,
-    //         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    //     }),
-    // ];
 
     const cellShaderModule = device.createShaderModule({
         label: "Visuals shader",
@@ -385,8 +325,6 @@ function run(
     let previousFrameTime = window.performance.now();
     let simulationStep = 0;
     let frames = 0;
-    let averageMs = 0;
-    let averageFrames = 0;
     updateGrid();
 
     function dispatchComputePass(encoder: GPUCommandEncoder) {

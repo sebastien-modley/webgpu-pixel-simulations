@@ -15,15 +15,11 @@ export default function shader_simulation(
             data: ptr<storage, array<Pixel>, read_write>, 
             offset: u32, count: u32) {
             for (var j = 0u; j < count; j++) {
-                data[offset + j].fireValue = 0;
-                data[offset + j].isWood = 0;
+                data[offset + j].fire = 0;
+                data[offset + j].wood = 0;
             }
         }
 
-        fn fireValue(x: u32, y: u32) -> f32 {
-            if (x >= u32(grid.x) || x < 0 || y >= u32(grid.y) || y < 0) {return 1f;}
-            return cellStateIn[cellIndex(vec2u(x,y))].fireValue;
-        }
 
         fn getOffset(v: vec2u, offset: vec2i) -> vec2u {
             return vec2u(
@@ -31,15 +27,17 @@ export default function shader_simulation(
             );
         }
 
+        fn getState(x:u32, y:u32) -> Pixel {
+            if (x >= u32(grid.x) || x < 0 || y >= u32(grid.y) || y < 0) {return Pixel(0,0);}
+            return cellStateIn[cellIndex(vec2u(x,y))];
+
+        }
+
         fn mooreIndex(i:u32, offset:vec2i) -> u32 {
             let offsetIndex = u32(offset.y+1) * 3 + u32(offset.x+1);
             return i*9 + offsetIndex;
         }
 
-        fn isWood(x:u32, y:u32) -> bool {
-            if (x >= u32(grid.x) || x < 0 || y >= u32(grid.y) || y < 0) {return false;}
-            return cellStateIn[cellIndex(vec2u(x,y))].isWood == 1u;
-        }
 
         ${shader_data}
 
@@ -66,12 +64,14 @@ export default function shader_simulation(
             let randu1 = u32(round(randf));
             let randu2 = u32(round((randf - trunc(randf)) * 10));
 
-            var fireValue = fireValue(cell.x, cell.y) * 1.0;
-            fireValue = round(max(0, fireValue - f32(randu1 & 1u)));
-            if (cell.y ==0) {fireValue = 36;}
-            else if (isCloseToZero(fireValue)) {return;}
-            else if (isWood(cell.x, cell.y)) {
-                fireValue += 36;
+            let state = getState(cell.x, cell.y);
+
+            var fire = state.fire * 1.0;
+            fire = round(max(0, fire - f32(randu1 & 1u)));
+            if (cell.y ==0) {fire = 36;}
+            else if (isCloseToZero(fire)) {return;}
+            else if (!isCloseToZero(state.wood)) {
+                fire += 36;
             }
 
 
@@ -86,9 +86,9 @@ export default function shader_simulation(
 
             let share_sum = share_top + share_top_left + share_top_right;
 
-            neighbourhood_intent[mooreIndex(i, vec2i(-1,1))].fireValue = fireValue * (share_top_left/share_sum);
-            neighbourhood_intent[mooreIndex(i, vec2i(0,1))].fireValue = fireValue * (share_top/share_sum);
-            neighbourhood_intent[mooreIndex(i, vec2i(1,1))].fireValue = fireValue * (share_top_right/share_sum);
+            neighbourhood_intent[mooreIndex(i, vec2i(-1,1))].fire = fire * (share_top_left/share_sum);
+            neighbourhood_intent[mooreIndex(i, vec2i(0,1))].fire = fire * (share_top/share_sum);
+            neighbourhood_intent[mooreIndex(i, vec2i(1,1))].fire = fire * (share_top_right/share_sum);
         }
 
         @compute
@@ -105,8 +105,8 @@ export default function shader_simulation(
             for (var x = -1; x <= 1; x++) {
                 for (var y = -1; y <= 1; y++) {
                     let i_neighbour = cellIndex(getOffset(cell.xy, vec2i(x, y)));
-                    neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fireValue = neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fireValue;
-                    neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fireValue = 0;
+                    neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire = neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fire;
+                    neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fire = 0;
                 }
             }
 
@@ -126,14 +126,14 @@ export default function shader_simulation(
             for (var x = -1; x <= 1; x++) {
                 for (var y = -1; y <= 1; y++) {
                     if !isWithinBounds(cell.xy, grid) {continue;}
-                    sum += neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fireValue;
+                    sum += neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire;
                 }
             }
 
-            cellStateOut[i].fireValue = sum;
-            cellStateOut[i].isWood = cellStateIn[i].isWood;
-            if (cellStateIn[i].isWood == 1u && !isCloseToZero(cellStateIn[i].fireValue)) {
-                    cellStateOut[i].isWood = 0u;
+            cellStateOut[i].fire = sum;
+            cellStateOut[i].wood = cellStateIn[i].wood;
+            if (cellStateIn[i].wood > 0 && !isCloseToZero(cellStateIn[i].fire)) {
+                    cellStateOut[i].wood = 0;
             }
         }
     `;

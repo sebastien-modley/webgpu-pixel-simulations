@@ -26,7 +26,7 @@ export default function shader_visuals(): string {
             let i = input.instance;
             let cell = vec2u(i%grid.x,i/grid.x);
             let state = cellStateIn[input.instance];
-            let isCellActive = !isCloseToZero(state.fireValue) || state.isWood == 1u;
+            let isCellActive = !isCloseToZero(state.fire) || state.wood > 0;
             let gridf = vec2f(grid);
 
             let cellOffset = vec2f(cell) / gridf * 2;
@@ -50,8 +50,8 @@ export default function shader_visuals(): string {
             @location(1) @interpolate(flat) cellIndex: u32
         ) -> @location(0) vec4f {
             let state = cellStateIn[cellIndex];
-            let fireColor = calculateRawFireColor(state.fireValue);
-            if (state.isWood == 1u) {
+            let fireColor = calculateRawFireColor(state.fire);
+            if (state.wood > 0) {
                 return vec4f(0.6, 0.2, 0.2, 1f);
             }
             return fireColor;
@@ -73,7 +73,6 @@ export default function shader_visuals(): string {
             );
             const checkPoints = array<f32, checkPointCount-1>(
                 12, 16, 19, 24, 32, 36
-                // 0.05, 0.3, 1
             );
 
             var color = colors[0];
