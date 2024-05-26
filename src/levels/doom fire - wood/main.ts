@@ -111,7 +111,7 @@ function run(
             y++
         ) {
             cellStartData[y * GRID_SIZE + x] = {
-                wood: 1,
+                wood: 100,
             };
         }
     }
@@ -191,7 +191,7 @@ function run(
             },
             {
                 binding: 5,
-                visibility: GPUShaderStage.COMPUTE,
+                visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
                 buffer: {}, // time uniform buffer
             },
         ],

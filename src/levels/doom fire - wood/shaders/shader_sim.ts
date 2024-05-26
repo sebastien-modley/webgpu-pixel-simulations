@@ -66,29 +66,46 @@ export default function shader_simulation(
 
             let state = getState(cell.x, cell.y);
 
-            var fire = state.fire * 1.0;
-            fire = round(max(0, fire - f32(randu1 & 1u)));
-            if (cell.y ==0) {fire = 36;}
-            else if (isCloseToZero(fire)) {return;}
-            else if (!isCloseToZero(state.wood)) {
-                fire += 36;
+            var fire = state.fire;
+
+            let wood = state.wood;
+
+            if (isCloseToZero(wood)) {
+                var share_top = rand11(f32(i)*time*time);
+                var share_top_left = rand11((f32(i)-time)*time*time) * 4;
+                var share_top_right = rand11((f32(i)+time)*time*time) * 0.25;
+    
+                
+    
+                let share_sum = share_top + share_top_left + share_top_right;
+    
+                neighbourhood_intent[mooreIndex(i, vec2i(-1,1))].fire = fire * (share_top_left/share_sum);
+                neighbourhood_intent[mooreIndex(i, vec2i(0,1))].fire = fire * (share_top/share_sum);
+                neighbourhood_intent[mooreIndex(i, vec2i(1,1))].fire = fire * (share_top_right/share_sum);    
+            }
+            else if (wood < 25) {
+                var sum_wood_neighbours = 0;
+                for (var x = -1; x <= 1; x++) {
+                    for (var y = -1; y <= 1; y++) {
+                        let pos = getOffset(cell.xy, vec2i(x,y));
+                        if (isCloseToZero(getState(pos.x, pos.y).wood)) {continue;}
+                        sum_wood_neighbours++;
+                    }
+                }
+                for (var x = -1; x <= 1; x++) {
+                    for (var y = -1; y <= 1; y++) {
+                        let pos = getOffset(cell.xy, vec2i(x,y));
+                        if (isCloseToZero(getState(pos.x, pos.y).wood)) {continue;}
+                        neighbourhood_intent[mooreIndex(i, vec2i(x, y))].fire = fire/f32(sum_wood_neighbours);
+                    }
+                }
+                return;
+            }
+            else {
+                neighbourhood_intent[mooreIndex(i, vec2i(0,0))].fire = fire;
+                return;
             }
 
-
-
-
-
-            var share_top = rand11(f32(i)*time*time);
-            var share_top_left = rand11((f32(i)-time)*time*time) * 4;
-            var share_top_right = rand11((f32(i)+time)*time*time) * 0.25;
-
-            
-
-            let share_sum = share_top + share_top_left + share_top_right;
-
-            neighbourhood_intent[mooreIndex(i, vec2i(-1,1))].fire = fire * (share_top_left/share_sum);
-            neighbourhood_intent[mooreIndex(i, vec2i(0,1))].fire = fire * (share_top/share_sum);
-            neighbourhood_intent[mooreIndex(i, vec2i(1,1))].fire = fire * (share_top_right/share_sum);
         }
 
         @compute
@@ -122,19 +139,35 @@ export default function shader_simulation(
             if !computeCellValid(cell, grid) {return;}
 
             //sum leftover outgoing intent and accepted incoming intent
-            var sum = 0f; 
+            var fire = 0f; 
             for (var x = -1; x <= 1; x++) {
                 for (var y = -1; y <= 1; y++) {
                     if !isWithinBounds(cell.xy, grid) {continue;}
-                    sum += neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire;
+                    fire += neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire;
                 }
             }
 
-            cellStateOut[i].fire = sum;
-            cellStateOut[i].wood = cellStateIn[i].wood;
-            if (cellStateIn[i].wood > 0 && !isCloseToZero(cellStateIn[i].fire)) {
-                    cellStateOut[i].wood = 0;
+            let randf = rand11(f32(i)*time) * 2;
+            let randu1 = u32(round(randf));
+
+            fire = max(0, fire - f32(randu1 & 1u));
+            if (cell.y == 0) {fire = 36;}
+
+
+            var wood = cellStateIn[i].wood;
+
+            
+
+            var woodBurntByFire = clamp(fire, 0, wood);
+
+
+            if (!isCloseToZero(woodBurntByFire)) {
+                wood -= woodBurntByFire;
+                fire += log(woodBurntByFire);            
             }
+
+            cellStateOut[i].fire = fire;
+            cellStateOut[i].wood = wood;
         }
     `;
 }
