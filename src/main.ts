@@ -1,6 +1,6 @@
 import { Pane } from "tweakpane";
 import { reportToUser } from "./utils/util";
-import run from "./levels/doom fire - wood/main";
+import run from "./levels/custom fire - wood/main";
 
 const canvas = document.querySelector("canvas");
 canvas.width = 300;
