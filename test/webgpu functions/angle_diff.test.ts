@@ -4,16 +4,16 @@ import { TypedArray } from "webgpu-utils";
 
 import { WebgpuTesting } from "../utils/webgpu/TestTemplates";
 
-describe("Basic gpu functions", () => {
+describe("Custom gpu functions", () => {
     describe("Addition", () => {
-        test.each<{ a: number[]; b: number[]; expected: number[] }>([
-            { a: [1, 2], b: [2, 5], expected: [3, 7] },
+        test.each<{ a: number[]; b: number[]; expected: number }>([
+            { a: [1, 1], b: [1, 1], expected: 0 },
         ])("$a + $b == $expected", async ({ a, b, expected }) => {
             const shader = /*wgsl*/ `
             @compute
             @workgroup_size(1,1,1)
             fn compute() {
-                result = a + b;
+                result = acos(clamp(dot(a,b)/(length(a)*length(b)), 0, 1));
             }
             `;
 
@@ -23,10 +23,10 @@ describe("Basic gpu functions", () => {
                     { name: "a", value: a, unit: "vec2f" },
                     { name: "b", value: b, unit: "vec2f" },
                 ],
-                [{ name: "result", unit: "vec2f" }],
+                [{ name: "result", unit: "f32" }],
                 "addition test"
             );
-            expect(Array.from(output["result"] as TypedArray)).toEqual(
+            expect(Array.from(output["result"] as TypedArray)).toBeCloseTo(
                 expected
             );
         });
