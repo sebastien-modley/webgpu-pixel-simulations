@@ -21,6 +21,7 @@ fn isWithinBounds(cell: vec2u, grid: vec2u) -> bool {
 fn isCloseToZero(f: f32) -> bool {return abs(f) <= 0.05;}
 
 
+
 // static const vec2i neighbours_4[4] = {
 //             int2(0,-1),
 //     int2(-1,0),     int2(1,0), 

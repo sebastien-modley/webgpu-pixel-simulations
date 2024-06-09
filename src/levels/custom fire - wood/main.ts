@@ -9,21 +9,73 @@ import { StatLogger } from "../../utils/StatLogger";
 import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 import { shader_data } from "./shaders/shader_data";
+import { Pane } from "tweakpane";
+
+const shaderInputNameCorrector = (inputName: string) =>
+    inputName.replace(" ", "_");
 
 const GRID_SIZE = 128;
-const UPDATE_INTERVAL = 16 * 2; //ms
+const UPDATE_INTERVAL_MS = (fps) => 1000 / fps;
 const WORKGROUP_SIZE = 4;
 const LOG_EVERY_X_FRAMES = 120;
 const RENDERING_ENABLED = true;
-const ITERATIONS_PER_FRAME = 1;
 
 const statLogger = new StatLogger(LOG_EVERY_X_FRAMES);
+
+const PANE_FIRE_BEHAVIOUR_PARAMS = {
+    noise: 1.3,
+    "focus A": 1.2,
+    "focus B": 1.5,
+    spread: 2.7181597666,
+};
+
+const SIM_PARAMS = {
+    "updates / frame": 1,
+    fps: 30,
+};
 
 function run(
     device: GPUDevice,
     context: GPUCanvasContext,
-    canvasFormat: GPUTextureFormat
+    canvasFormat: GPUTextureFormat,
+    pane: Pane
 ) {
+    const fireSettingsFolder = pane.addFolder({ title: "Fire settings" });
+    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise", {
+        min: 0,
+        max: 10,
+        step: 0.1,
+    });
+
+    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "focus A", {
+        min: 0,
+        max: 10,
+        step: 0.1,
+    });
+
+    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "focus B", {
+        min: 0,
+        max: 10,
+        step: 0.1,
+    });
+
+    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "spread", {
+        min: 0,
+        max: Math.PI,
+    });
+
+    const simSettingsFolder = pane.addFolder({ title: "Simulation settings" });
+    simSettingsFolder.addBinding(SIM_PARAMS, "updates / frame", {
+        min: 0,
+        max: 20,
+        step: 1,
+    });
+    simSettingsFolder.addBinding(SIM_PARAMS, "fps", {
+        min: 1,
+        max: 240,
+        step: 1,
+    });
+
     const shaderDefs = makeShaderDataDefinitions(shader_data);
 
     const arrayBuffers = {
@@ -63,26 +115,21 @@ function run(
         ),
     };
 
-    const shaderDataObjects: { [key: string]: StructuredView } = {
-        grid: makeStructuredView(shaderDefs.uniforms["grid"]),
-        time: makeStructuredView(shaderDefs.uniforms["time"]),
-        cellStateIn: makeStructuredView(
-            shaderDefs.storages["cellStateIn"],
-            arrayBuffers.cellStateIn
-        ),
-        cellStateOut: makeStructuredView(
-            shaderDefs.storages["cellStateIn"],
-            arrayBuffers.cellStateOut
-        ),
-        neighbourhood_intent: makeStructuredView(
-            shaderDefs.storages["neighbourhood_intent"],
-            arrayBuffers.neighbourhood_intent
-        ),
-        neighbourhood_maintain: makeStructuredView(
-            shaderDefs.storages["neighbourhood_maintain"],
-            arrayBuffers.neighbourhood_maintain
-        ),
-    };
+    const shaderDataObjects: { [key: string]: StructuredView } = {};
+    const shaderTypesToRead = [shaderDefs.uniforms, shaderDefs.storages];
+    shaderTypesToRead.forEach((shaderType) => {
+        Object.keys(shaderType).forEach((inputName) => {
+            shaderDataObjects[inputName] = Object.hasOwn(
+                arrayBuffers,
+                inputName
+            )
+                ? makeStructuredView(
+                      shaderType[inputName],
+                      arrayBuffers[inputName]
+                  )
+                : makeStructuredView(shaderType[inputName]);
+        });
+    });
 
     const shaderDataUsages: { [key: string]: number } = {
         grid: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -92,9 +139,18 @@ function run(
         neighbourhood_intent: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         neighbourhood_maintain:
             GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        ...Object.assign(
+            {} as { [key: string]: number },
+            ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
+                console.log();
+                return {
+                    ["FIRE_BEHAVIOUR__" + shaderInputNameCorrector(key)]:
+                        GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+                };
+            })
+        ),
     };
-
-    const shaderDataBuffers: { [key: string]: GPUBuffer } = {};
+    console.log(shaderDataUsages);
 
     shaderDataObjects.grid.set([GRID_SIZE, GRID_SIZE]);
     shaderDataObjects.time.set(window.performance.now());
@@ -115,7 +171,9 @@ function run(
             };
         }
     }
-    shaderDataObjects.cellStateIn.set(cellStartData);
+    shaderDataObjects["cellStateIn"].set(cellStartData);
+
+    const shaderDataBuffers: { [key: string]: GPUBuffer } = {};
 
     for (var shaderDataElementName in shaderDataObjects) {
         if (!shaderDataObjects.hasOwnProperty(shaderDataElementName)) continue;
@@ -159,7 +217,7 @@ function run(
         label: "Cell Bind Group Layout",
         entries: [
             {
-                binding: 0,
+                binding: shaderDefs.uniforms["grid"].binding,
                 visibility:
                     GPUShaderStage.VERTEX |
                     GPUShaderStage.FRAGMENT |
@@ -167,7 +225,7 @@ function run(
                 buffer: {}, // Grid uniform buffer
             },
             {
-                binding: 1,
+                binding: shaderDefs.storages["cellStateIn"].binding,
                 visibility:
                     GPUShaderStage.VERTEX |
                     GPUShaderStage.FRAGMENT |
@@ -175,25 +233,35 @@ function run(
                 buffer: { type: "read-only-storage" }, // Cell state input buffer
             },
             {
-                binding: 2,
+                binding: shaderDefs.storages["cellStateOut"].binding,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }, // Cell state output buffer
             },
             {
-                binding: 3,
+                binding: shaderDefs.storages["neighbourhood_intent"].binding,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }, //intent temp
             },
             {
-                binding: 4,
+                binding: shaderDefs.storages["neighbourhood_maintain"].binding,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: { type: "storage" }, //keeping temp
             },
             {
-                binding: 5,
+                binding: shaderDefs.uniforms["time"].binding,
                 visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
                 buffer: {}, // time uniform buffer
             },
+            ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
+                return {
+                    binding:
+                        shaderDefs.uniforms[
+                            "FIRE_BEHAVIOUR__" + shaderInputNameCorrector(key)
+                        ].binding,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {},
+                };
+            }),
         ],
     });
 
@@ -203,68 +271,103 @@ function run(
             layout: bindGroupLayout,
             entries: [
                 {
-                    binding: 0,
+                    binding: shaderDefs.uniforms["grid"].binding,
                     resource: { buffer: shaderDataBuffers.grid },
                 },
                 {
-                    binding: 1,
+                    binding: shaderDefs.storages["cellStateIn"].binding,
                     resource: { buffer: shaderDataBuffers.cellStateIn },
                 },
                 {
-                    binding: 2,
+                    binding: shaderDefs.storages["cellStateOut"].binding,
                     resource: { buffer: shaderDataBuffers.cellStateOut },
                 },
                 {
-                    binding: 3,
+                    binding:
+                        shaderDefs.storages["neighbourhood_intent"].binding,
                     resource: {
                         buffer: shaderDataBuffers.neighbourhood_intent,
                     },
                 },
                 {
-                    binding: 4,
+                    binding:
+                        shaderDefs.storages["neighbourhood_maintain"].binding,
                     resource: {
                         buffer: shaderDataBuffers.neighbourhood_maintain,
                     },
                 },
                 {
-                    binding: 5,
+                    binding: shaderDefs.uniforms["time"].binding,
                     resource: { buffer: shaderDataBuffers.time },
                 },
+                ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
+                    return {
+                        binding:
+                            shaderDefs.uniforms[
+                                "FIRE_BEHAVIOUR__" +
+                                    shaderInputNameCorrector(key)
+                            ].binding,
+                        resource: {
+                            buffer: shaderDataBuffers[
+                                "FIRE_BEHAVIOUR__" +
+                                    shaderInputNameCorrector(key)
+                            ],
+                        },
+                    };
+                }),
             ],
         }),
         device.createBindGroup({
+            //inverse in and out storages
             label: "Cell renderer bind group B",
             layout: bindGroupLayout,
 
             entries: [
                 {
-                    binding: 0,
+                    binding: shaderDefs.uniforms["grid"].binding,
                     resource: { buffer: shaderDataBuffers.grid },
                 },
                 {
-                    binding: 1,
+                    binding: shaderDefs.storages["cellStateIn"].binding,
                     resource: { buffer: shaderDataBuffers.cellStateOut },
                 },
                 {
-                    binding: 2,
+                    binding: shaderDefs.storages["cellStateOut"].binding,
                     resource: { buffer: shaderDataBuffers.cellStateIn },
                 },
                 {
-                    binding: 3,
+                    binding:
+                        shaderDefs.storages["neighbourhood_intent"].binding,
                     resource: {
                         buffer: shaderDataBuffers.neighbourhood_intent,
                     },
                 },
                 {
-                    binding: 4,
+                    binding:
+                        shaderDefs.storages["neighbourhood_maintain"].binding,
                     resource: {
                         buffer: shaderDataBuffers.neighbourhood_maintain,
                     },
                 },
                 {
-                    binding: 5,
+                    binding: shaderDefs.uniforms["time"].binding,
                     resource: { buffer: shaderDataBuffers.time },
                 },
+                ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
+                    return {
+                        binding:
+                            shaderDefs.uniforms[
+                                "FIRE_BEHAVIOUR__" +
+                                    shaderInputNameCorrector(key)
+                            ].binding,
+                        resource: {
+                            buffer: shaderDataBuffers[
+                                "FIRE_BEHAVIOUR__" +
+                                    shaderInputNameCorrector(key)
+                            ],
+                        },
+                    };
+                }),
             ],
         }),
     ];
@@ -324,7 +427,6 @@ function run(
 
     let previousFrameTime = window.performance.now();
     let simulationStep = 0;
-    let frames = 0;
     updateGrid();
 
     function dispatchComputePass(encoder: GPUCommandEncoder) {
@@ -334,10 +436,20 @@ function run(
         const timeData = new Float32Array([window.performance.now()]);
         device.queue.writeBuffer(shaderDataBuffers.time, 0, timeData);
 
-        for (let i = 0; i < ITERATIONS_PER_FRAME; i++) {
-            if (i > 0) {
-                simulationStep++;
-            }
+        Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).forEach((key) => {
+            let valueToWrite = new Float32Array([
+                PANE_FIRE_BEHAVIOUR_PARAMS[key],
+            ]);
+            device.queue.writeBuffer(
+                shaderDataBuffers[
+                    `FIRE_BEHAVIOUR__${shaderInputNameCorrector(key)}`
+                ],
+                0,
+                valueToWrite
+            );
+        });
+
+        for (let i = 0; i < SIM_PARAMS["updates / frame"]; i++) {
             computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
 
             computePass.setPipeline(simulationPipelines.push);
@@ -348,6 +460,8 @@ function run(
 
             computePass.setPipeline(simulationPipelines.update);
             computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+
+            simulationStep++;
         }
 
         computePass.end();
@@ -364,9 +478,6 @@ function run(
         const encoder = device.createCommandEncoder();
 
         dispatchComputePass(encoder);
-
-        simulationStep++;
-        frames++;
 
         // Start a render pass
         if (RENDERING_ENABLED) {
@@ -398,7 +509,10 @@ function run(
         const timeDiff = window.performance.now() - previousFrameTime;
         statLogger.log("calc time", timeDiff);
 
-        setTimeout(() => updateGrid(), Math.max(0, UPDATE_INTERVAL - timeDiff));
+        setTimeout(
+            () => updateGrid(),
+            Math.max(0, UPDATE_INTERVAL_MS(SIM_PARAMS["fps"]) - timeDiff)
+        );
     }
 }
 

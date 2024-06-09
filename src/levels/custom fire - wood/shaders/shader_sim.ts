@@ -1,3 +1,5 @@
+import { basic_maths } from "../../../utils/webgpu/shader scripts/basic_maths";
+import { euler_maths } from "../../../utils/webgpu/shader scripts/euler_maths";
 import { shader_data } from "./shader_data";
 import { noiseMaths, randMaths } from "./shader_noise";
 import { pixelMaths } from "./shader_utils";
@@ -10,13 +12,16 @@ export default function shader_simulation(
         //includes
         ${pixelMaths}
         ${noiseMaths}
+        ${basic_maths}
+        ${euler_maths}
 
         fn empty_array(
             data: ptr<storage, array<Pixel>, read_write>, 
             offset: u32, count: u32) {
             for (var j = 0u; j < count; j++) {
-                data[offset + j].fire = 0;
-                data[offset + j].wood = 0;
+                data[offset + j].fire = f32();
+                data[offset + j].wood = f32();
+                data[offset + j].fireDirection = vec2f();
             }
         }
 
@@ -33,9 +38,13 @@ export default function shader_simulation(
 
         }
 
+        fn neighbourOffsetIndex(offset: vec2i) -> u32 {
+            return u32(offset.y+1) * 3 + u32(offset.x+1);
+
+        }
+
         fn mooreIndex(i:u32, offset:vec2i) -> u32 {
-            let offsetIndex = u32(offset.y+1) * 3 + u32(offset.x+1);
-            return i*9 + offsetIndex;
+            return i*9 + neighbourOffsetIndex(offset);
         }
 
 
@@ -47,6 +56,17 @@ export default function shader_simulation(
             vec2i(1,-1),
             vec2i(-1,-1),
         );
+
+
+
+
+
+        fn getFireImportance(cellIndex: u32, fireDirection: vec2f, neighbourOffset: vec2i, maxAngle:f32) -> f32 {
+            let angle = angle_between(fireDirection, vec2f(neighbourOffset));
+            if (angle > maxAngle) {return f32();}
+            let fluctuation = noise(f32(mooreIndex(cellIndex, neighbourOffset)) * time) * FIRE_BEHAVIOUR__noise;
+            return exp( - FIRE_BEHAVIOUR__focus_A * pow((angle + fluctuation), FIRE_BEHAVIOUR__focus_B));
+        }
 
 
         @compute
@@ -67,44 +87,33 @@ export default function shader_simulation(
             let state = getState(cell.x, cell.y);
 
             var fire = state.fire;
+            if (isCloseToZero(state.fire)){return;}
 
             let wood = state.wood;
 
             if (isCloseToZero(wood)) {
                 //spread fire based on angle
                 var angleImportancesSum = 0f;
-                let fireAngle = radians(135);
-                let maxAngle = radians(110);
+                let fireDirection = state.fireDirection;
+                let maxAngle = FIRE_BEHAVIOUR__spread;
+                var importances = array<f32,9>();
                 for (var x = -1; x <= 1; x++) {
                     for (var y = -1; y <= 1; y++) {
                         if (x == 0 && y == 0) {continue;}
-                        let offset = vec2f(vec2i(x, y));
-                        let angle = acos(dot(offset, vec2f(cos(fireAngle), sin(fireAngle))) / (length(offset) * length(vec2f(1,0))));
-                        if (angle > maxAngle) {continue;}
-                        angleImportancesSum += exp(-angle);
+                        importances[neighbourOffsetIndex(vec2i(x,y))] = getFireImportance(i, fireDirection, vec2i(x,y), maxAngle);
+                        angleImportancesSum += importances[neighbourOffsetIndex(vec2i(x,y))];
                     }
                 }
                 for (var x = -1; x <= 1; x++) {
                     for (var y = -1; y <= 1; y++) {
                         if (x == 0 && y == 0) {continue;}
-                        let offset = vec2f(vec2i(x, y));
-                        let angle = acos(dot(offset, vec2f(cos(fireAngle), sin(fireAngle))) / (length(offset) * length(vec2f(1,0))));
-                        if (angle > maxAngle) {continue;}
-                        let angle_share = exp(-angle) / angleImportancesSum;
+                        if (importances[neighbourOffsetIndex(vec2i(x,y))] == 0f) {continue;}
+                        let angle_share = importances[neighbourOffsetIndex(vec2i(x,y))] / angleImportancesSum;
+
                         neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fire = fire * angle_share;
+                        neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fireDirection = fireDirection;
                     }
                 }
-                // var share_top = rand11(f32(i)*time*time);
-                // var share_top_left = rand11((f32(i)-time)*time*time) * 4;
-                // var share_top_right = rand11((f32(i)+time)*time*time) * 0.25;
-    
-                
-    
-                // let share_sum = share_top + share_top_left + share_top_right;
-    
-                // neighbourhood_intent[mooreIndex(i, vec2i(-1,1))].fire = fire * (share_top_left/share_sum);
-                // neighbourhood_intent[mooreIndex(i, vec2i(0,1))].fire = fire * (share_top/share_sum);
-                // neighbourhood_intent[mooreIndex(i, vec2i(1,1))].fire = fire * (share_top_right/share_sum);    
             }
             else if (wood < 25) {
                 var sum_wood_neighbours = 0;
@@ -115,6 +124,7 @@ export default function shader_simulation(
                         sum_wood_neighbours++;
                     }
                 }
+                if (sum_wood_neighbours==0){return;}
                 for (var x = -1; x <= 1; x++) {
                     for (var y = -1; y <= 1; y++) {
                         let pos = getOffset(cell.xy, vec2i(x,y));
@@ -147,6 +157,10 @@ export default function shader_simulation(
                     let i_neighbour = cellIndex(getOffset(cell.xy, vec2i(x, y)));
                     neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire = neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fire;
                     neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fire = 0;
+
+                    neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fireDirection = neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fireDirection;
+                    neighbourhood_intent[mooreIndex(i_neighbour, vec2i(-x, -y))].fireDirection = vec2f();
+
                 }
             }
 
@@ -163,10 +177,15 @@ export default function shader_simulation(
 
             //sum leftover outgoing intent and accepted incoming intent
             var fire = 0f; 
+            var direction = vec2f();
+            var weight_direction : f32 = 0;
             for (var x = -1; x <= 1; x++) {
                 for (var y = -1; y <= 1; y++) {
                     if !isWithinBounds(cell.xy, grid) {continue;}
-                    fire += neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire;
+                    let neighbourIncomingFire = neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fire;
+                    direction = interp_weights_vec2f(direction, neighbourhood_maintain[mooreIndex(i, vec2i(x, y))].fireDirection, weight_direction, neighbourIncomingFire);
+                    weight_direction += neighbourIncomingFire;
+                    fire += neighbourIncomingFire;
                 }
             }
 
@@ -174,12 +193,17 @@ export default function shader_simulation(
             let randu1 = u32(round(randf));
 
             fire = max(0, fire - f32(randu1 & 1u));
-            if (cell.y == grid.y/2 && cell.x > grid.x/2 && cell.x < grid.x/2+10) {fire = 36;}
+            if (cell.y == 0) {
+                let spawnFireAmount = 16f;
+                let spawnFireDirection =vec2f(-1,1);// vec2f(cos(time/1000f),sin(time/1000f));
+                direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
+                fire += spawnFireAmount;
+            }
+
+            direction = interp_weights_vec2f(direction, vec2f(0,1), fire, 0.1f);
 
 
             var wood = cellStateIn[i].wood;
-
-            
 
             var woodBurntByFire = clamp(fire, 0, wood);
 
@@ -188,8 +212,12 @@ export default function shader_simulation(
                 wood -= woodBurntByFire;
                 fire += log(woodBurntByFire);            
             }
+            if (isCloseToZero(wood)) {
+                wood = 0f;
+            }
 
             cellStateOut[i].fire = fire;
+            cellStateOut[i].fireDirection = direction;
             cellStateOut[i].wood = wood;
         }
     `;

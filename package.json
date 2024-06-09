@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@edge-runtime/vm": "^3.2.0",
-    "@tweakpane/core": "^1.1.7",
+    "@tweakpane/core": "^2.0.3",
     "@vitest/browser": "^1.6.0",
     "@vitest/ui": "^1.6.0",
     "@webgpu/types": "^0.1.40",
@@ -27,7 +27,7 @@
     "webdriverio": "^8.38.0"
   },
   "dependencies": {
-    "tweakpane": "^3.1.8",
+    "tweakpane": "^4.0.3",
     "webgpu-utils": "^1.7.2",
     "wgpu-matrix": "^1.1.0"
   }
