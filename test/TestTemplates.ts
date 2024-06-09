@@ -8,7 +8,7 @@ import {
     makeStructuredView,
     makeTypedArrayViews,
 } from "webgpu-utils";
-import { setupWebgpuWithoutCanvas } from "../../../src/utils/webgpu/Setup";
+import { setupWebgpuWithoutCanvas } from "../src/utils/webgpu/Setup";
 
 export namespace WebgpuTesting.Unit {
     export async function scalarTest(
