@@ -59,7 +59,6 @@ export default function shader_visuals(): string {
         ) -> @location(0) vec4f {
             let state = cellStateIn[cellIndex];
             let fireColor = calculateRawFireColor(state.fire);
-
             var color = fireColor;
             if (state.wood > 0) {
                 color = overlap_color(getWoodColor(cell.xy), color); 
@@ -71,21 +70,20 @@ export default function shader_visuals(): string {
 
 
         fn calculateRawFireColor(state: f32) -> vec4f {
-            const checkPointCount = 7;
+            const checkPointCount = 6;
             const colors = array<vec4f, checkPointCount>(
                 vec4f(0.02f, 0.02f, 0.02f, 0.3f), 
                 vec4f(0.37f, 0.1f, 0.02f, 0.6f),
                 vec4f(0.62f, 0.22f, 0.02f, 0.9f),
                 vec4f(0.65f, 0.4f, 0.05f, 1f),
                 vec4f(0.62f, 0.47f, 0.1f, 1f),
-                vec4f(0.57f, 0.57f, 0.17f, 1f), 
-                vec4f(1f, 1f, 1f, 1f), 
+                vec4f(0.57f, 0.57f, 0.17f, 1f)
             );
             const checkPoints = array<f32, checkPointCount-1>(
-                12, 16, 19, 24, 32, 36
+                1, 5, 8, 13, 21
             );
 
-            if (state < checkPoints[0]) {return vec4f();}
+            if (state < checkPoints[0]) {return vec4f(0,0,0,0);}
             var color = colors[0];
             for (var i = 1; i < checkPointCount; i++) {
                 if (state < checkPoints[i-1]) {break;}

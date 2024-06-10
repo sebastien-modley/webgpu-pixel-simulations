@@ -23,15 +23,16 @@ const RENDERING_ENABLED = true;
 const statLogger = new StatLogger(LOG_EVERY_X_FRAMES);
 
 const PANE_FIRE_BEHAVIOUR_PARAMS = {
-    noise: 1.3,
-    "focus A": 1.2,
-    "focus B": 1.5,
+    "noise A": 1.2,
+    "noise B": 1.09,
+    "focus A": 1.0,
+    "focus B": 2.0,
     spread: 2.7181597666,
 };
 
 const SIM_PARAMS = {
-    "updates / frame": 1,
-    fps: 30,
+    "updates / frame": 2,
+    fps: 17,
 };
 
 function run(
@@ -41,10 +42,15 @@ function run(
     pane: Pane
 ) {
     const fireSettingsFolder = pane.addFolder({ title: "Fire settings" });
-    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise", {
+    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise A", {
         min: 0,
-        max: 10,
+        max: 5,
         step: 0.1,
+    });
+    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise B", {
+        min: 0,
+        max: 5,
+        step: 0.01,
     });
 
     fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "focus A", {
@@ -487,7 +493,7 @@ function run(
                         view: context.getCurrentTexture().createView(),
                         loadOp: "clear",
                         storeOp: "store",
-                        clearValue: [0, 0, 0.4, 1], //background color
+                        clearValue: [0, 0, 0, 0],
                     },
                 ],
             });

@@ -35,6 +35,7 @@ export async function setupWebgpu(
     context.configure({
         device: device,
         format: canvasFormat,
+        alphaMode: "premultiplied",
     });
 
     return { device, context, canvasFormat };

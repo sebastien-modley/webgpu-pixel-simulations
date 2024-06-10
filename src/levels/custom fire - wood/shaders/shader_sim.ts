@@ -64,7 +64,7 @@ export default function shader_simulation(
         fn getFireImportance(cellIndex: u32, fireDirection: vec2f, neighbourOffset: vec2i, maxAngle:f32) -> f32 {
             let angle = angle_between(fireDirection, vec2f(neighbourOffset));
             if (angle > maxAngle) {return f32();}
-            let fluctuation = noise(f32(mooreIndex(cellIndex, neighbourOffset)) * time) * FIRE_BEHAVIOUR__noise;
+            let fluctuation = noise(f32(mooreIndex(cellIndex, neighbourOffset)) * time) * FIRE_BEHAVIOUR__noise_A;
             return exp( - FIRE_BEHAVIOUR__focus_A * pow((angle + fluctuation), FIRE_BEHAVIOUR__focus_B));
         }
 
@@ -189,10 +189,9 @@ export default function shader_simulation(
                 }
             }
 
-            let randf = rand11(f32(i)*time) * 2;
-            let randu1 = u32(round(randf));
+            let randf = rand11(f32(i)*time);
 
-            fire = max(0, fire - f32(randu1 & 1u));
+            fire = max(0, fire - FIRE_BEHAVIOUR__noise_B * randf);
             if (cell.y == 0) {
                 let spawnFireAmount = 16f;
                 let spawnFireDirection =vec2f(-1,1);// vec2f(cos(time/1000f),sin(time/1000f));

@@ -18,9 +18,13 @@ export const shader_data = /* wgsl */ `
     @group(0) @binding(${++binding}) var<uniform> time: f32;
 
     
-    @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__noise: f32;
+    @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__noise_A: f32;
+    @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__noise_B: f32;
     @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__focus_A: f32;
     @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__focus_B: f32;
     @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__spread: f32;
+
+
+    // @group(0) @binding(${++binding}) var<uniform> mouse_pos: vec2f;
     
 `;

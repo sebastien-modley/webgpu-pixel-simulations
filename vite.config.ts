@@ -12,4 +12,7 @@ export default {
             name: "chrome", // browser name is required
         },
     },
+    build: {
+        target: "ES2022",
+    },
 };
