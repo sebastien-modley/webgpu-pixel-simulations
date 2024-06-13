@@ -6,7 +6,7 @@ body {
 }
 
 /* about centering divs: https://www.joshwcomeau.com/css/center-a-div/  */
-canvas {
+canvas.webgpu-simulation-canvas {
   width:calc(min(75vw, 100vh));
   height:calc(min(75vw,100vh));
   position:fixed;
