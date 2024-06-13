@@ -23,6 +23,10 @@ fn safe_div_vec2f(a:vec2f, b:vec2f, valueIfZero: vec2f) -> vec2f {
     ;
 }
 
+fn interp_linear_vec2f(a: vec2f, b:vec2f, t:f32) -> vec2f {
+    return a + (b - a) * t;
+}
+
 fn interp_weights_vec2f(a: vec2f, b:vec2f, w_a:f32, w_b:f32) -> vec2f {
     //Assuming the directions are cubic
     let w_total = w_a + w_b;
