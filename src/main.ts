@@ -16,4 +16,9 @@ const canvas = document.querySelector("canvas");
 function handleResize() {}
 
 let { device, context, canvasFormat } = await setupWebgpu(canvas, handleResize);
-run(device, context, canvasFormat, new Pane({ expanded: true }));
+try {
+    run(canvas, device, context, canvasFormat, new Pane({ expanded: true }));
+} catch (e) {
+    console.error(e);
+    console.trace(e);
+}

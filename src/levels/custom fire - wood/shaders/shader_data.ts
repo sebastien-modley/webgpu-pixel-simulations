@@ -7,6 +7,12 @@ export const shader_data = /* wgsl */ `
         fireDirection:vec2f
     };
 
+    struct ColourCheckpoint {
+        colour:vec4f,
+        checkpoint:f32
+    };
+    
+
     //grid dimensions
     @group(0) @binding(${++binding}) var<uniform> grid:vec2u; 
     //1 for each cell
@@ -25,6 +31,9 @@ export const shader_data = /* wgsl */ `
     @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__spread: f32;
 
 
-    // @group(0) @binding(${++binding}) var<uniform> mouse_pos: vec2f;
+    @group(0) @binding(${++binding}) var<uniform> mouse_pos: vec2f;
+
+    @group(0) @binding(${++binding}) var<uniform> fireColourCheckpointsCount: i32;
+    @group(0) @binding(${++binding}) var<storage> fireColourCheckpoints: array<ColourCheckpoint>;
     
 `;

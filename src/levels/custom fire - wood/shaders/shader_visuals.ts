@@ -70,26 +70,13 @@ export default function shader_visuals(): string {
 
 
         fn calculateRawFireColor(state: f32) -> vec4f {
-            const checkPointCount = 6;
-            const colors = array<vec4f, checkPointCount>(
-                vec4f(0.02f, 0.02f, 0.02f, 0.3f), 
-                vec4f(0.37f, 0.1f, 0.02f, 0.6f),
-                vec4f(0.62f, 0.22f, 0.02f, 0.9f),
-                vec4f(0.65f, 0.4f, 0.05f, 1f),
-                vec4f(0.62f, 0.47f, 0.1f, 1f),
-                vec4f(0.57f, 0.57f, 0.17f, 1f)
-            );
-            const checkPoints = array<f32, checkPointCount-1>(
-                1, 5, 8, 13, 21
-            );
-
-            if (state < checkPoints[0]) {return vec4f(0,0,0,0);}
-            var color = colors[0];
-            for (var i = 1; i < checkPointCount; i++) {
-                if (state < checkPoints[i-1]) {break;}
-                color = colors[i];
+            if (state < fireColourCheckpoints[0].checkpoint) {return vec4f(0,0,0,0);}
+            var color = fireColourCheckpoints[0].colour;
+            for (var i = 1; i < fireColourCheckpointsCount; i++) {
+                if (state < fireColourCheckpoints[i].checkpoint) {break;}
+                color = fireColourCheckpoints[i].colour;
             }
-            return color;
+            return vec4f(color.rgb * color.a, color.a);
         } 
 
         fn getWoodColor(pos: vec2u) -> vec4f{

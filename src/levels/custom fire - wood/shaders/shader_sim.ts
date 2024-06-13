@@ -91,11 +91,11 @@ export default function shader_simulation(
 
             let wood = state.wood;
 
-            if (isCloseToZero(wood)) {
+            if (wood <=0) {
                 //spread fire based on angle
                 var angleImportancesSum = 0f;
                 let fireDirection = state.fireDirection;
-                let maxAngle = FIRE_BEHAVIOUR__spread;
+                let maxAngle = 360f;
                 var importances = array<f32,9>();
                 for (var x = -1; x <= 1; x++) {
                     for (var y = -1; y <= 1; y++) {
@@ -111,7 +111,7 @@ export default function shader_simulation(
                         let angle_share = importances[neighbourOffsetIndex(vec2i(x,y))] / angleImportancesSum;
 
                         neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fire = fire * angle_share;
-                        neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fireDirection = fireDirection;
+                        neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fireDirection = interp_linear_vec2f(select(normalize(fireDirection), vec2f(0,0), isCloseToZero_vec2f(fireDirection)), normalize(vec2f(vec2i(x,y))), FIRE_BEHAVIOUR__spread);
                     }
                 }
             }
@@ -120,7 +120,7 @@ export default function shader_simulation(
                 for (var x = -1; x <= 1; x++) {
                     for (var y = -1; y <= 1; y++) {
                         let pos = getOffset(cell.xy, vec2i(x,y));
-                        if (isCloseToZero(getState(pos.x, pos.y).wood)) {continue;}
+                        if (getState(pos.x, pos.y).wood <= 0) {continue;}
                         sum_wood_neighbours++;
                     }
                 }
@@ -128,7 +128,7 @@ export default function shader_simulation(
                 for (var x = -1; x <= 1; x++) {
                     for (var y = -1; y <= 1; y++) {
                         let pos = getOffset(cell.xy, vec2i(x,y));
-                        if (isCloseToZero(getState(pos.x, pos.y).wood)) {continue;}
+                        if (getState(pos.x, pos.y).wood <= 0) {continue;}
                         neighbourhood_intent[mooreIndex(i, vec2i(x, y))].fire = fire/f32(sum_wood_neighbours);
                     }
                 }
@@ -204,19 +204,40 @@ export default function shader_simulation(
 
             var wood = cellStateIn[i].wood;
 
-            var woodBurntByFire = clamp(fire, 0, wood);
+            var woodBurntByFire = max(0,clamp(fire, 0, wood));
 
 
             if (!isCloseToZero(woodBurntByFire)) {
                 wood -= woodBurntByFire;
-                fire += log(woodBurntByFire);            
+                fire += log(woodBurntByFire);
+                if isCloseToZero(wood) {
+                    wood = -10f;
+                }
             }
-            if (isCloseToZero(wood)) {
-                wood = 0f;
+            else if (wood < 0) {
+                wood -= 10;
+                if (wood < -500) {
+                    wood = 100;
+                }
             }
 
+            if all(
+                abs(mouse_pos * vec2f(grid) - vec2f(cell.xy))
+                 < 
+                vec2f(1,1)
+            ) {
+                let dist = length(abs(mouse_pos * vec2f(grid) - vec2f(cell.xy)));
+                let spawnFireAmount = 15f * (sqrt(2f)-dist);
+                let spawnFireDirection =vec2f(0,1);// vec2f(cos(time/1000f),sin(time/1000f));
+                direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
+                fire += spawnFireAmount;
+
+            }
+
+            
+
             cellStateOut[i].fire = fire;
-            cellStateOut[i].fireDirection = direction;
+            cellStateOut[i].fireDirection = normalize(direction);
             cellStateOut[i].wood = wood;
         }
     `;

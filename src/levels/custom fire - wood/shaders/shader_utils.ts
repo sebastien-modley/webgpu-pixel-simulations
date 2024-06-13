@@ -19,6 +19,7 @@ fn isWithinBounds(cell: vec2u, grid: vec2u) -> bool {
 }
 
 fn isCloseToZero(f: f32) -> bool {return abs(f) <= 0.05;}
+fn isCloseToZero_vec2f(v: vec2f) -> bool {return isCloseToZero(v.x) && isCloseToZero(v.y);}
 
 
 
