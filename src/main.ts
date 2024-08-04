@@ -1,6 +1,7 @@
 import { Pane } from "tweakpane";
 import { reportToUser } from "./utils/util";
 import run from "./levels/custom fire - wood/main";
+import sandrun from "./levels/sand simulation/main";
 import { setupWebgpu } from "./utils/webgpu/Setup";
 
 const shader = /*wgsl*/ `

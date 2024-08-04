@@ -20,17 +20,20 @@ import {
 } from "@tweakpane/core";
 
 const shaderInputNameCorrector = (inputName: string) =>
-    inputName.replace(" ", "_");
+    inputName.replaceAll(" ", "_");
 
-const GRID_SIZE = 128;
+const GRID_SIZE = 256;
 const UPDATE_INTERVAL_MS = (fps) => 1000 / fps;
 const WORKGROUP_SIZE = 4;
 const LOG_EVERY_X_FRAMES = 120;
 const RENDERING_ENABLED = true;
 
 const statLogger = new StatLogger(LOG_EVERY_X_FRAMES);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const PANE_FIRE_BEHAVIOUR_PARAMS = {
+    "ground fire power": 16,
+    "mouse torch power": 36,
     "noise A": 1.2,
     "noise B": 1.09,
     "focus A": 1.0,
@@ -52,12 +55,12 @@ let FIRE_COLOUR_PARAMS: {
     maxCount: number;
 } = {
     checkpoints: [
-        { colour: { r: 0.02, g: 0.02, b: 0.02, a: 0.3 }, checkpoint: 0.1 },
-        { colour: { r: 0.37, g: 0.1, b: 0.02, a: 0.6 }, checkpoint: 1 },
-        { colour: { r: 0.62, g: 0.22, b: 0.02, a: 0.9 }, checkpoint: 5 },
-        { colour: { r: 0.65, g: 0.4, b: 0.05, a: 1 }, checkpoint: 8 },
-        { colour: { r: 0.62, g: 0.47, b: 0.1, a: 1 }, checkpoint: 13 },
-        { colour: { r: 0.57, g: 0.57, b: 0.17, a: 1 }, checkpoint: 21 },
+        { colour: { r: 0.07, g: 0.07, b: 0.07, a: 0.51 }, checkpoint: 0.1 },
+        { colour: { r: 0.42, g: 0.11, b: 0.02, a: 0.65 }, checkpoint: 1 },
+        { colour: { r: 0.57, g: 0.2, b: 0.03, a: 0.9 }, checkpoint: 5 },
+        { colour: { r: 0.65, g: 0.38, b: 0.02, a: 1.0 }, checkpoint: 8 },
+        { colour: { r: 0.75, g: 0.51, b: 0.22, a: 1.0 }, checkpoint: 13 },
+        { colour: { r: 0.81, g: 0.65, b: 0.39, a: 1.0 }, checkpoint: 21 },
     ],
     count: 6,
     maxCount: 20,
@@ -65,7 +68,7 @@ let FIRE_COLOUR_PARAMS: {
 
 var mousePosition = [-1, -1];
 
-function run(
+async function run(
     canvas: HTMLCanvasElement,
     device: GPUDevice,
     context: GPUCanvasContext,
@@ -83,6 +86,24 @@ function run(
     });
 
     const fireSettingsFolder = pane.addFolder({ title: "Fire settings" });
+    fireSettingsFolder.addBinding(
+        PANE_FIRE_BEHAVIOUR_PARAMS,
+        "ground fire power",
+        {
+            min: 0,
+            max: 100,
+            step: 0.1,
+        }
+    );
+    fireSettingsFolder.addBinding(
+        PANE_FIRE_BEHAVIOUR_PARAMS,
+        "mouse torch power",
+        {
+            min: 0,
+            max: 100,
+            step: 0.1,
+        }
+    );
     fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise A", {
         min: 0,
         max: 5,
@@ -108,7 +129,7 @@ function run(
 
     fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "spread", {
         min: 0,
-        max: 100,
+        max: 2,
     });
 
     const simSettingsFolder = pane.addFolder({ title: "Simulation settings" });
@@ -338,7 +359,6 @@ function run(
         ...Object.assign(
             {} as { [key: string]: number },
             ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
-                console.log();
                 return {
                     ["FIRE_BEHAVIOUR__" + shaderInputNameCorrector(key)]:
                         GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -678,17 +698,29 @@ function run(
         }),
     };
 
-    let previousFrameTime = window.performance.now();
-    let simulationStep = 0;
-    updateGrid();
     canvas.addEventListener("mousemove", (ev) => {
         mousePosition = [
             (ev.pageX - canvas.offsetLeft) / canvas.width,
             1 - (ev.pageY - canvas.offsetTop) / canvas.height,
         ];
-        console.log(mousePosition);
     });
 
+    let simulationStep = 0;
+    var previousFrameTime = window.performance.now();
+    while (true) {
+        const startFrameTime = window.performance.now();
+        statLogger.log("fps", 1000 / (startFrameTime - previousFrameTime));
+        await updateGrid();
+        statLogger.log("calc time", window.performance.now() - startFrameTime);
+        previousFrameTime = window.performance.now();
+        await sleep(
+            Math.max(
+                0,
+                UPDATE_INTERVAL_MS(SIM_PARAMS["fps"]) -
+                    (window.performance.now() - previousFrameTime)
+            )
+        );
+    }
     function dispatchComputePass(encoder: GPUCommandEncoder) {
         const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
         const computePass = encoder.beginComputePass();
@@ -716,7 +748,6 @@ function run(
                 })
         );
         shaderDataObjects["fireColourCheckpoints"].set(check);
-        console.log(check, FIRE_COLOUR_PARAMS.count);
         device.queue.writeBuffer(
             shaderDataBuffers["fireColourCheckpoints"],
             0,
@@ -755,13 +786,6 @@ function run(
     }
 
     async function updateGrid() {
-        statLogger.log(
-            "fps",
-            1000 / (window.performance.now() - previousFrameTime)
-        );
-
-        previousFrameTime = window.performance.now();
-
         const encoder = device.createCommandEncoder();
 
         dispatchComputePass(encoder);
@@ -792,14 +816,6 @@ function run(
         }
         device.queue.submit([encoder.finish()]);
         await device.queue.onSubmittedWorkDone();
-
-        const timeDiff = window.performance.now() - previousFrameTime;
-        statLogger.log("calc time", timeDiff);
-
-        setTimeout(
-            () => updateGrid(),
-            Math.max(0, UPDATE_INTERVAL_MS(SIM_PARAMS["fps"]) - timeDiff)
-        );
     }
 }
 

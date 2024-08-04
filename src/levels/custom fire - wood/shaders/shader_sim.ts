@@ -193,7 +193,7 @@ export default function shader_simulation(
 
             fire = max(0, fire - FIRE_BEHAVIOUR__noise_B * randf);
             if (cell.y == 0) {
-                let spawnFireAmount = 16f;
+                let spawnFireAmount = FIRE_BEHAVIOUR__ground_fire_power;
                 let spawnFireDirection =vec2f(-1,1);// vec2f(cos(time/1000f),sin(time/1000f));
                 direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
                 fire += spawnFireAmount;
@@ -216,7 +216,7 @@ export default function shader_simulation(
             }
             else if (wood < 0) {
                 wood -= 10;
-                if (wood < -500) {
+                if (wood < -1000) {
                     wood = 100;
                 }
             }
@@ -227,7 +227,7 @@ export default function shader_simulation(
                 vec2f(1,1)
             ) {
                 let dist = length(abs(mouse_pos * vec2f(grid) - vec2f(cell.xy)));
-                let spawnFireAmount = 15f * (sqrt(2f)-dist);
+                let spawnFireAmount = FIRE_BEHAVIOUR__mouse_torch_power * (sqrt(2f)-dist);
                 let spawnFireDirection =vec2f(0,1);// vec2f(cos(time/1000f),sin(time/1000f));
                 direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
                 fire += spawnFireAmount;

@@ -7,7 +7,7 @@ export class StatLogger {
     stats_sum: Map_Ex<any, any> = new Map_Ex<any, any>();
     stats_counter: Map_Ex<any, Counter> = new Map_Ex<any, Counter>();
 
-    constructor(average_over: number | null) {
+    constructor(average_over?: number) {
         this.framesToAverageOver = average_over;
     }
 
