@@ -64,8 +64,8 @@ export default function shader_simulation(
         fn getFireImportance(cellIndex: u32, fireDirection: vec2f, neighbourOffset: vec2i, maxAngle:f32) -> f32 {
             let angle = angle_between(fireDirection, vec2f(neighbourOffset));
             if (angle > maxAngle) {return f32();}
-            let fluctuation = noise(f32(mooreIndex(cellIndex, neighbourOffset)) * time) * FIRE_BEHAVIOUR__noise_A;
-            return exp( - FIRE_BEHAVIOUR__focus_A * pow((angle + fluctuation), FIRE_BEHAVIOUR__focus_B));
+            let fluctuation = noise(f32(mooreIndex(cellIndex, neighbourOffset)) * time) * fireBehaviour.noise_A;
+            return exp( - fireBehaviour.focus_A * pow((angle + fluctuation), fireBehaviour.focus_B));
         }
 
 
@@ -111,7 +111,7 @@ export default function shader_simulation(
                         let angle_share = importances[neighbourOffsetIndex(vec2i(x,y))] / angleImportancesSum;
 
                         neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fire = fire * angle_share;
-                        neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fireDirection = interp_linear_vec2f(select(normalize(fireDirection), vec2f(0,0), isCloseToZero_vec2f(fireDirection)), normalize(vec2f(vec2i(x,y))), FIRE_BEHAVIOUR__spread);
+                        neighbourhood_intent[mooreIndex(i, vec2i(x,y))].fireDirection = interp_linear_vec2f(select(normalize(fireDirection), vec2f(0,0), isCloseToZero_vec2f(fireDirection)), normalize(vec2f(vec2i(x,y))), fireBehaviour.spread);
                     }
                 }
             }
@@ -191,9 +191,9 @@ export default function shader_simulation(
 
             let randf = rand11(f32(i)*time);
 
-            fire = max(0, fire - FIRE_BEHAVIOUR__noise_B * randf);
+            fire = max(0, fire - fireBehaviour.noise_B * randf);
             if (cell.y == 0) {
-                let spawnFireAmount = FIRE_BEHAVIOUR__ground_fire_power;
+                let spawnFireAmount = fireBehaviour.ground_fire_power;
                 let spawnFireDirection =vec2f(-1,1);// vec2f(cos(time/1000f),sin(time/1000f));
                 direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
                 fire += spawnFireAmount;
@@ -227,7 +227,7 @@ export default function shader_simulation(
                 vec2f(1,1)
             ) {
                 let dist = length(abs(mouse_pos * vec2f(grid) - vec2f(cell.xy)));
-                let spawnFireAmount = FIRE_BEHAVIOUR__mouse_torch_power * (sqrt(2f)-dist);
+                let spawnFireAmount = fireBehaviour.mouse_torch_power * (sqrt(2f)-dist);
                 let spawnFireDirection =vec2f(0,1);// vec2f(cos(time/1000f),sin(time/1000f));
                 direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
                 fire += spawnFireAmount;

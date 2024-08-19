@@ -3,6 +3,7 @@ import { reportToUser } from "./utils/util";
 import run from "./levels/custom fire - wood/main";
 import sandrun from "./levels/sand simulation/main";
 import { setupWebgpu } from "./utils/webgpu/Setup";
+import sand_run_remake from "./levels/sand simulation remade/main";
 
 const shader = /*wgsl*/ `
 @compute
@@ -18,7 +19,15 @@ function handleResize() {}
 
 let { device, context, canvasFormat } = await setupWebgpu(canvas, handleResize);
 try {
-    run(canvas, device, context, canvasFormat, new Pane({ expanded: true }));
+    // sandrun(device, context, canvasFormat);
+    // run(canvas, device, context, canvasFormat, new Pane({ expanded: true }));
+    sand_run_remake(
+        canvas,
+        device,
+        context,
+        canvasFormat,
+        new Pane({ expanded: true })
+    );
 } catch (e) {
     console.error(e);
     console.trace(e);

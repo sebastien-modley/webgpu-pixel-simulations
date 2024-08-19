@@ -1,9 +1,6 @@
 import {
     ArrayDefinition,
-    StructDefinition,
     StructuredView,
-    TextureDefinition,
-    isTypedArray,
     makeShaderDataDefinitions,
     makeStructuredView,
 } from "webgpu-utils";
@@ -12,17 +9,8 @@ import shader_simulation from "./shaders/shader_sim";
 import shader_visuals from "./shaders/shader_visuals";
 import { shader_data } from "./shaders/shader_data";
 import { Pane } from "tweakpane";
-import {
-    BindingApi,
-    BladeApi,
-    BladeController,
-    FolderApi,
-    View,
-} from "@tweakpane/core";
+import { BindingApi, FolderApi } from "@tweakpane/core";
 import shader_vertex_fragment from "./shaders/shader_vertex_fragment";
-
-const shaderInputNameCorrector = (inputName: string) =>
-    inputName.replaceAll(" ", "_");
 
 const GRID_SIZE = 256;
 const UPDATE_INTERVAL_MS = (fps) => 1000 / fps;
@@ -33,44 +21,14 @@ const RENDERING_ENABLED = true;
 const statLogger = new StatLogger(LOG_EVERY_X_FRAMES);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const PANE_FIRE_BEHAVIOUR_PARAMS = {
-    "ground fire power": 16,
-    "mouse torch power": 36,
-    "noise A": 1.2,
-    "noise B": 1.09,
-    "focus A": 1.0,
-    "focus B": 2.0,
-    spread: 0,
-};
-
 const SIM_PARAMS = {
     "updates / frame": 2,
-    fps: 30,
-};
-
-let FIRE_COLOUR_PARAMS: {
-    checkpoints: {
-        colour: { r: number; g: number; b: number; a: number };
-        checkpoint: number;
-    }[];
-    count: number;
-    maxCount: number;
-} = {
-    checkpoints: [
-        { colour: { r: 0.07, g: 0.07, b: 0.07, a: 0.51 }, checkpoint: 0.1 },
-        { colour: { r: 0.42, g: 0.11, b: 0.02, a: 0.65 }, checkpoint: 1 },
-        { colour: { r: 0.57, g: 0.2, b: 0.03, a: 0.9 }, checkpoint: 5 },
-        { colour: { r: 0.65, g: 0.38, b: 0.02, a: 1.0 }, checkpoint: 8 },
-        { colour: { r: 0.75, g: 0.51, b: 0.22, a: 1.0 }, checkpoint: 13 },
-        { colour: { r: 0.81, g: 0.65, b: 0.39, a: 1.0 }, checkpoint: 21 },
-    ],
-    count: 6,
-    maxCount: 20,
+    fps: 60,
 };
 
 var mousePosition = [-1, -1];
 
-async function run(
+async function sand_run_remake(
     canvas: HTMLCanvasElement,
     device: GPUDevice,
     context: GPUCanvasContext,
@@ -92,53 +50,6 @@ async function run(
         code: shader_visuals(WORKGROUP_SIZE),
     });
 
-    const fireSettingsFolder = pane.addFolder({ title: "Fire settings" });
-    fireSettingsFolder.addBinding(
-        PANE_FIRE_BEHAVIOUR_PARAMS,
-        "ground fire power",
-        {
-            min: 0,
-            max: 100,
-            step: 0.1,
-        }
-    );
-    fireSettingsFolder.addBinding(
-        PANE_FIRE_BEHAVIOUR_PARAMS,
-        "mouse torch power",
-        {
-            min: 0,
-            max: 100,
-            step: 0.1,
-        }
-    );
-    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise A", {
-        min: 0,
-        max: 5,
-        step: 0.1,
-    });
-    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "noise B", {
-        min: 0,
-        max: 5,
-        step: 0.01,
-    });
-
-    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "focus A", {
-        min: 0,
-        max: 10,
-        step: 0.1,
-    });
-
-    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "focus B", {
-        min: 0,
-        max: 10,
-        step: 0.1,
-    });
-
-    fireSettingsFolder.addBinding(PANE_FIRE_BEHAVIOUR_PARAMS, "spread", {
-        min: 0,
-        max: 2,
-    });
-
     const simSettingsFolder = pane.addFolder({ title: "Simulation settings" });
     simSettingsFolder.addBinding(SIM_PARAMS, "updates / frame", {
         min: 0,
@@ -150,149 +61,6 @@ async function run(
         max: 240,
         step: 1,
     });
-
-    const fireColourSettingsFolder = pane.addFolder({
-        title: "Fire colour settings",
-    });
-    const fireColourCheckpointPanes: {
-        folder: FolderApi;
-        colour: BindingApi<any>;
-        checkpoint: BindingApi<any>;
-    }[] = [];
-
-    const handleCheckpointChange = (i: number, value: number) => {
-        FIRE_COLOUR_PARAMS.checkpoints[i].checkpoint = value;
-        [i - 1, i + 1].forEach((idx) => {
-            if (idx < 0 || idx >= FIRE_COLOUR_PARAMS.count) return;
-            console.log(i, idx, fireColourCheckpointPanes);
-            const panes = fireColourCheckpointPanes[idx];
-            panes.folder.remove(panes.colour);
-            panes.folder.remove(panes.checkpoint);
-
-            const { colour, checkpoint } = createColourCheckpointSettings(
-                idx,
-                idx == FIRE_COLOUR_PARAMS.count - 1,
-                panes.folder
-            );
-            panes.colour = colour;
-            panes.checkpoint = checkpoint;
-        });
-    };
-
-    const handleCheckpointCountChange = (newCount: number) => {
-        {
-            for (
-                let i = FIRE_COLOUR_PARAMS.checkpoints.length;
-                i < newCount;
-                i++
-            ) {
-                FIRE_COLOUR_PARAMS.checkpoints.push(
-                    structuredClone(
-                        FIRE_COLOUR_PARAMS.checkpoints[
-                            FIRE_COLOUR_PARAMS.checkpoints.length - 1
-                        ]
-                    )
-                );
-            }
-            FIRE_COLOUR_PARAMS.checkpoints.forEach((e, i) => {
-                if (
-                    i > 0 &&
-                    e.checkpoint <=
-                        FIRE_COLOUR_PARAMS.checkpoints[i - 1].checkpoint
-                ) {
-                    e.checkpoint =
-                        FIRE_COLOUR_PARAMS.checkpoints[i - 1].checkpoint + 5;
-                }
-            });
-            fireColourCheckpointPanes
-                .splice(Math.max(0, newCount - 1))
-                .forEach((panes) =>
-                    fireColourSettingsFolder.remove(panes.folder)
-                );
-            fireColourCheckpointPanes.forEach((panes, idx) => {
-                panes.folder.remove(panes.checkpoint);
-                panes.checkpoint = createCheckpointBinding(
-                    idx,
-                    idx == newCount - 1,
-                    panes.folder
-                );
-            });
-            for (let i = fireColourCheckpointPanes.length; i < newCount; i++) {
-                console.log(i, i == newCount - 1);
-                addColourSettings(i, i == newCount - 1);
-            }
-            console.log(FIRE_COLOUR_PARAMS);
-        }
-    };
-
-    const createCheckpointBinding = (
-        i: number,
-        isLast: boolean,
-        folder: FolderApi
-    ) => {
-        const checkpoint = folder
-            .addBinding(FIRE_COLOUR_PARAMS.checkpoints[i], "checkpoint", {
-                min:
-                    i == 0
-                        ? 0
-                        : FIRE_COLOUR_PARAMS.checkpoints[i - 1].checkpoint + 1,
-                max: isLast
-                    ? 1000
-                    : FIRE_COLOUR_PARAMS.checkpoints[i + 1].checkpoint - 1,
-                step: 1,
-            })
-            .on("change", (ev) => {
-                handleCheckpointChange(i, ev.value);
-            });
-        return checkpoint;
-    };
-
-    const createColourCheckpointSettings = (
-        i: number,
-        isLast: boolean,
-        folder: FolderApi
-    ) => {
-        const colour = folder.addBinding(
-            FIRE_COLOUR_PARAMS.checkpoints[i],
-            "colour",
-            { picker: "inline", color: { type: "float" } }
-        );
-        const checkpoint = createCheckpointBinding(i, isLast, folder);
-        return { colour, checkpoint };
-    };
-
-    const addColourSettings = (i: number, isLast: boolean = false) => {
-        const folder = fireColourSettingsFolder.addFolder({
-            title: `Checkpoint ${i}`,
-        });
-        const { colour, checkpoint } = createColourCheckpointSettings(
-            i,
-            isLast,
-            folder
-        );
-        fireColourCheckpointPanes.push({
-            folder: folder,
-            colour: colour,
-            checkpoint: checkpoint,
-        });
-    };
-
-    fireColourSettingsFolder
-        .addBinding(FIRE_COLOUR_PARAMS, "count", {
-            step: 1,
-            min: 1,
-            max: FIRE_COLOUR_PARAMS.maxCount,
-        })
-        .on("change", (ev) => handleCheckpointCountChange(ev.value));
-
-    handleCheckpointCountChange(FIRE_COLOUR_PARAMS.count);
-
-    // fireColourSettingsFolder.addBinding(FIRE_COLOUR_PARAMS, "checkpoints", {
-    //     // view: "color",
-    //     color: {},
-    //     expanded: true,
-    //     picker: "inline",
-    // });
 
     const shaderDefs = makeShaderDataDefinitions(shader_data);
 
@@ -332,12 +100,6 @@ async function run(
                 GRID_SIZE *
                 9
         ),
-        fireColourCheckpoints: new ArrayBuffer(
-            (
-                shaderDefs.storages["fireColourCheckpoints"]
-                    .typeDefinition as ArrayDefinition
-            ).elementType.size * FIRE_COLOUR_PARAMS.maxCount
-        ),
         simulationVisualsIn: new ArrayBuffer(
             (
                 shaderDefs.storages["simulationVisualsIn"]
@@ -353,6 +115,12 @@ async function run(
             ).elementType.size *
                 GRID_SIZE *
                 GRID_SIZE
+        ),
+        updatesInFrame: new ArrayBuffer(
+            (
+                shaderDefs.storages["updatesInFrame"]
+                    .typeDefinition as ArrayDefinition
+            ).elementType.size * 2
         ),
     };
 
@@ -378,26 +146,12 @@ async function run(
 
     const shaderDataUsages: { [key: string]: number } = {
         grid: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        time: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         cellStateIn: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         cellStateOut: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         neighbourhood_intent: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         neighbourhood_maintain:
             GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        fireBehaviour: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        // ...Object.assign(
-        //     {} as { [key: string]: number },
-        //     ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
-        //         return {
-        //             ["FIRE_BEHAVIOUR__" + shaderInputNameCorrector(key)]:
-        //                 GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        //         };
-        //     })
-        // ),
         mouse_pos: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        fireColourCheckpointsCount:
-            GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        fireColourCheckpoints: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         simulationVisualsIn: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         simulationVisualsOut: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         updatesInFrame: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -406,33 +160,30 @@ async function run(
     console.log(shaderDataUsages);
 
     shaderDataObjects.grid.set([GRID_SIZE, GRID_SIZE]);
-    shaderDataObjects.time.set(window.performance.now());
     const cellStartData = Array(GRID_SIZE * GRID_SIZE);
-    for (let x = 0; x < GRID_SIZE; x++) {
-        cellStartData[(GRID_SIZE - 1) * GRID_SIZE + x] = {
-            fire: 36,
-        };
-    }
-    for (let x = 0; x < GRID_SIZE; x++) {
-        for (
-            let y = (GRID_SIZE * 3) / 4 - 10;
-            y < (GRID_SIZE * 3) / 4 + 10;
-            y++
-        ) {
-            cellStartData[y * GRID_SIZE + x] = {
-                wood: 100,
-            };
-        }
+    // for (let x = 0; x < GRID_SIZE; x++) {
+    //     cellStartData[(GRID_SIZE - 1) * GRID_SIZE + x] = 1;
+    // }
+    // for (let x = 0; x < GRID_SIZE; x++) {
+    //     for (
+    //         let y = (GRID_SIZE * 3) / 4 - 10;
+    //         y < (GRID_SIZE * 3) / 4 + 10;
+    //         y++
+    //     ) {
+    //         cellStartData[y * GRID_SIZE + x] = 1;
+    //     }
+    // }
+
+    for (let i = 0; i < GRID_SIZE * GRID_SIZE; ++i) {
+        const x = i % GRID_SIZE;
+        const y = i / GRID_SIZE;
+        const distFromMiddle =
+            Math.abs(x - GRID_SIZE / 2) + Math.abs(y - GRID_SIZE / 2);
+        cellStartData[i] = Math.random() > distFromMiddle / GRID_SIZE ? 1 : 0;
     }
 
     shaderDataObjects["cellStateIn"].set(cellStartData);
     shaderDataObjects["mouse_pos"].set(mousePosition);
-    shaderDataObjects["fireColourCheckpointsCount"].set(
-        FIRE_COLOUR_PARAMS.maxCount
-    );
-    shaderDataObjects["fireColourCheckpoints"].set([
-        FIRE_COLOUR_PARAMS.checkpoints,
-    ]);
 
     shaderDataObjects["simulationVisualsIn"].set(
         new Array(GRID_SIZE * GRID_SIZE).fill([0, 0, 0, 0])
@@ -508,41 +259,9 @@ async function run(
                 buffer: { type: "storage" }, //keeping temp
             },
             {
-                binding: shaderDefs.uniforms["time"].binding,
-                visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
-                buffer: {}, // time uniform buffer
-            },
-            {
-                binding: shaderDefs.uniforms["fireBehaviour"].binding,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {}, // time uniform buffer
-            },
-            // ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
-            //     return {
-            //         binding:
-            //             shaderDefs.uniforms[
-            //                 "FIRE_BEHAVIOUR__" + shaderInputNameCorrector(key)
-            //             ].binding,
-            //         visibility: GPUShaderStage.COMPUTE,
-            //         buffer: {},
-            //     };
-            // }),
-
-            {
                 binding: shaderDefs.uniforms["mouse_pos"].binding,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {},
-            },
-            {
-                binding:
-                    shaderDefs.uniforms["fireColourCheckpointsCount"].binding,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: {},
-            },
-            {
-                binding: shaderDefs.storages["fireColourCheckpoints"].binding,
-                visibility: GPUShaderStage.COMPUTE,
-                buffer: { type: "read-only-storage" },
             },
             {
                 binding: shaderDefs.storages["simulationVisualsIn"].binding,
@@ -582,6 +301,7 @@ async function run(
         });
         device.queue.writeBuffer(bindingTagBuffers[i], 0, new Uint32Array([i]));
     }
+
     const bindGroups = [
         device.createBindGroup({
             label: "Cell renderer bind group A",
@@ -614,47 +334,8 @@ async function run(
                     },
                 },
                 {
-                    binding: shaderDefs.uniforms["time"].binding,
-                    resource: { buffer: shaderDataBuffers.time },
-                },
-                {
-                    binding: shaderDefs.uniforms["fireBehaviour"].binding,
-                    resource: { buffer: shaderDataBuffers.fireBehaviour },
-                },
-                // ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
-                //     return {
-                //         binding:
-                //             shaderDefs.uniforms[
-                //                 "FIRE_BEHAVIOUR__" +
-                //                     shaderInputNameCorrector(key)
-                //             ].binding,
-                //         resource: {
-                //             buffer: shaderDataBuffers[
-                //                 "FIRE_BEHAVIOUR__" +
-                //                     shaderInputNameCorrector(key)
-                //             ],
-                //         },
-                //     };
-                // }),
-
-                {
                     binding: shaderDefs.uniforms["mouse_pos"].binding,
                     resource: { buffer: shaderDataBuffers.mouse_pos },
-                },
-                {
-                    binding:
-                        shaderDefs.uniforms["fireColourCheckpointsCount"]
-                            .binding,
-                    resource: {
-                        buffer: shaderDataBuffers.fireColourCheckpointsCount,
-                    },
-                },
-                {
-                    binding:
-                        shaderDefs.storages["fireColourCheckpoints"].binding,
-                    resource: {
-                        buffer: shaderDataBuffers.fireColourCheckpoints,
-                    },
                 },
                 {
                     binding: shaderDefs.storages["simulationVisualsIn"].binding,
@@ -712,47 +393,8 @@ async function run(
                     },
                 },
                 {
-                    binding: shaderDefs.uniforms["time"].binding,
-                    resource: { buffer: shaderDataBuffers.time },
-                },
-                {
-                    binding: shaderDefs.uniforms["fireBehaviour"].binding,
-                    resource: { buffer: shaderDataBuffers.fireBehaviour },
-                },
-                // ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
-                //     return {
-                //         binding:
-                //             shaderDefs.uniforms[
-                //                 "FIRE_BEHAVIOUR__" +
-                //                     shaderInputNameCorrector(key)
-                //             ].binding,
-                //         resource: {
-                //             buffer: shaderDataBuffers[
-                //                 "FIRE_BEHAVIOUR__" +
-                //                     shaderInputNameCorrector(key)
-                //             ],
-                //         },
-                //     };
-                // }),
-
-                {
                     binding: shaderDefs.uniforms["mouse_pos"].binding,
                     resource: { buffer: shaderDataBuffers.mouse_pos },
-                },
-                {
-                    binding:
-                        shaderDefs.uniforms["fireColourCheckpointsCount"]
-                            .binding,
-                    resource: {
-                        buffer: shaderDataBuffers.fireColourCheckpointsCount,
-                    },
-                },
-                {
-                    binding:
-                        shaderDefs.storages["fireColourCheckpoints"].binding,
-                    resource: {
-                        buffer: shaderDataBuffers.fireColourCheckpoints,
-                    },
                 },
                 {
                     binding: shaderDefs.storages["simulationVisualsIn"].binding,
@@ -866,64 +508,24 @@ async function run(
             )
         );
     }
-    function dispatchComputePass(encoder: GPUCommandEncoder) {
+    async function dispatchComputePass(encoder: GPUCommandEncoder) {
         const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
         const computePass = encoder.beginComputePass();
 
-        const timeData = new Float32Array([window.performance.now()]);
-        device.queue.writeBuffer(shaderDataBuffers.time, 0, timeData);
-
         const mouseData = new Float32Array(mousePosition);
         device.queue.writeBuffer(shaderDataBuffers.mouse_pos, 0, mouseData);
+        const updates = SIM_PARAMS["updates / frame"];
 
-        shaderDataObjects["fireColourCheckpointsCount"].set(
-            FIRE_COLOUR_PARAMS.count
-        );
-        device.queue.writeBuffer(
-            shaderDataBuffers["fireColourCheckpointsCount"],
-            0,
-            shaderDataObjects["fireColourCheckpointsCount"].arrayBuffer
-        );
-        const check = Array(FIRE_COLOUR_PARAMS.maxCount);
-        FIRE_COLOUR_PARAMS.checkpoints.forEach(
-            (e, i) =>
-                (check[i] = {
-                    checkpoint: e.checkpoint,
-                    colour: [e.colour.r, e.colour.g, e.colour.b, e.colour.a],
-                })
-        );
-        shaderDataObjects["fireColourCheckpoints"].set(check);
-        device.queue.writeBuffer(
-            shaderDataBuffers["fireColourCheckpoints"],
-            0,
-            shaderDataObjects["fireColourCheckpoints"].arrayBuffer
-        );
-        shaderDataObjects["fireBehaviour"].set({
-            ground_fire_power: PANE_FIRE_BEHAVIOUR_PARAMS["ground fire power"],
-            mouse_torch_power: PANE_FIRE_BEHAVIOUR_PARAMS["mouse torch power"],
-            noise_A: PANE_FIRE_BEHAVIOUR_PARAMS["noise A"],
-            noise_B: PANE_FIRE_BEHAVIOUR_PARAMS["noise B"],
-            focus_A: PANE_FIRE_BEHAVIOUR_PARAMS["focus A"],
-            focus_B: PANE_FIRE_BEHAVIOUR_PARAMS["focus B"],
-            spread: PANE_FIRE_BEHAVIOUR_PARAMS["spread"],
-        });
-        device.queue.writeBuffer(
-            shaderDataBuffers["fireBehaviour"],
-            0,
-            shaderDataObjects["fireBehaviour"].arrayBuffer
-        );
-        // Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).forEach((key) => {
-        //     let valueToWrite = new Float32Array([
-        //         PANE_FIRE_BEHAVIOUR_PARAMS[key],
-        //     ]);
-        //     device.queue.writeBuffer(
-        //         shaderDataBuffers[
-        //             `FIRE_BEHAVIOUR__${shaderInputNameCorrector(key)}`
-        //         ],
-        //         0,
-        //         valueToWrite
-        //     );
-        // });
+        if (updates > 0) {
+            shaderDataObjects["simulationVisualsIn"].set(
+                new Array(GRID_SIZE * GRID_SIZE).fill([0, 0, 0, 0])
+            );
+            device.queue.writeBuffer(
+                shaderDataBuffers["simulationVisualsIn"],
+                0,
+                shaderDataObjects["simulationVisualsIn"].arrayBuffer
+            );
+        }
 
         shaderDataObjects["updatesInFrame"].set([0, 0]);
         device.queue.writeBuffer(
@@ -932,8 +534,16 @@ async function run(
             shaderDataObjects["updatesInFrame"].arrayBuffer
         );
 
-        var updates = SIM_PARAMS["updates / frame"];
         for (let i = 0; i < updates; i++) {
+            shaderDataObjects["simulationVisualsOut"].set(
+                new Array(GRID_SIZE * GRID_SIZE).fill([0, 0, 0, 0])
+            );
+            device.queue.writeBuffer(
+                shaderDataBuffers["simulationVisualsOut"],
+                0,
+                shaderDataObjects["simulationVisualsOut"].arrayBuffer
+            );
+
             computePass.setBindGroup(0, bindGroups[simulationStep % 2]);
 
             computePass.setPipeline(simulationPipelines.push);
@@ -988,7 +598,7 @@ async function run(
     }
 }
 
-export default run;
+export default sand_run_remake;
 
 function _createVertexBuffer(device: GPUDevice) {
     const vertices = new Float32Array([

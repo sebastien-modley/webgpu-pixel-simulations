@@ -10,18 +10,8 @@ fn cellIndex(cell: vec2u) -> u32 {
     return posMod_u(cell.y, u32(grid.y)) * u32(grid.x) + posMod_u(cell.x, u32(grid.x));
 }
 
-fn computeCellValid(cell: vec3u, grid: vec2u) -> bool {
-    return cell.x < grid.x && cell.y < grid.y;
-}
-
-fn isWithinBounds(cell: vec2u, grid: vec2u) -> bool {
-    return cell.x < grid.x && cell.y < grid.y;
-}
-
 fn isCloseToZero(f: f32) -> bool {return abs(f) <= 0.05;}
-fn isCloseToZero_vec2f(v: vec2f) -> bool {return isCloseToZero(v.x) && isCloseToZero(v.y);}
 fn isCloseToZero_vec4f(v: vec4f) -> vec4<bool> {return vec4<bool>(isCloseToZero(v.x), isCloseToZero(v.y), isCloseToZero(v.z), isCloseToZero(v.w));}
-
 
 // static const vec2i neighbours_4[4] = {
 //             int2(0,-1),
