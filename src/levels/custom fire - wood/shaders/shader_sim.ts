@@ -221,13 +221,10 @@ export default function shader_simulation(
                 }
             }
 
-            if all(
-                abs(mouse_pos * vec2f(grid) - vec2f(cell.xy))
-                 < 
-                vec2f(1,1)
-            ) {
-                let dist = length(abs(mouse_pos * vec2f(grid) - vec2f(cell.xy)));
-                let spawnFireAmount = fireBehaviour.mouse_torch_power * (sqrt(2f)-dist);
+            var mouse_dist = length(abs(mouse_data.pos * vec2f(grid) - vec2f(cell.xy)));
+            var max_mouse_dist = 2.0;
+            if mouse_dist < max_mouse_dist && mouse_data.down == 1 {
+                let spawnFireAmount = fireBehaviour.mouse_torch_power * max(0, (max_mouse_dist-mouse_dist)/max_mouse_dist);
                 let spawnFireDirection =vec2f(0,1);// vec2f(cos(time/1000f),sin(time/1000f));
                 direction = interp_weights_vec2f(direction, spawnFireDirection, fire, spawnFireAmount);
                 fire += spawnFireAmount;

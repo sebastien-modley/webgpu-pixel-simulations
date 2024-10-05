@@ -12,15 +12,15 @@ export default function shader_simulation(
         ${shader_data}
 
         fn empty_array(
-            data: ptr<storage, array<u32>, read_write>, 
+            data: ptr<storage, array<Pixel>, read_write>, 
             offset: u32, count: u32) {
             for (var j = 0u; j < count; j++) {
-                data[offset + j] = 0;
+                data[offset + j] = Pixel(0, vec4f());
             }
         }
 
-        fn cellValue(x: u32, y: u32) -> u32 {
-            if (x >= u32(grid.x) || x < 0 || y >= u32(grid.y) || y < 0) {return 1;}
+        fn cellValue(x: u32, y: u32) -> Pixel {
+            if (x >= u32(grid.x) || x < 0 || y >= u32(grid.y) || y < 0) {return Pixel(1, vec4f());}
             return cellStateIn[cellIndex(vec2u(x,y))];
         }
 
@@ -40,8 +40,8 @@ export default function shader_simulation(
         const numPossibilities = 3;
         const outgoingPossibilities = array<vec2i, numPossibilities>(
             vec2i(0,-1),
+            vec2i(-1,-1),
             vec2i(1,-1),
-            vec2i(-1,-1)
         );
 
         @compute
@@ -54,7 +54,7 @@ export default function shader_simulation(
             empty_array(&neighbourhood_intent, i*9, 9);
 
             //empty? do nothing!
-            if cellValue(cell.x, cell.y) == 0 {
+            if cellValue(cell.x, cell.y).state == 0 {
                 return;
             }
 
@@ -62,13 +62,13 @@ export default function shader_simulation(
                 let offset = outgoingPossibilities[j];
                 let out_cell = getOffset(cell.xy, offset);
                 //neighbour is free - declare takeover intent!
-                if cellValue(out_cell.x, out_cell.y) == 0 {
-                    neighbourhood_intent[mooreIndex(i, offset)] = 1;
+                if cellValue(out_cell.x, out_cell.y).state == 0 {
+                    neighbourhood_intent[mooreIndex(i, offset)] = cellValue(cell.x,cell.y);
                     return;
                 }
             }
             //nevermind... re-assign to self
-            neighbourhood_intent[mooreIndex(i, vec2i(0,0))] = 1;
+            neighbourhood_intent[mooreIndex(i, vec2i(0,0))] = cellValue(cell.x,cell.y);
         }
 
         @compute
@@ -80,7 +80,7 @@ export default function shader_simulation(
             let i = cellIndex(cell.xy);
             empty_array(&neighbourhood_maintain, i*9, 9);
             
-            if neighbourhood_intent[mooreIndex(i, vec2i(0,0))] == 1 {
+            if neighbourhood_intent[mooreIndex(i, vec2i(0,0))].state == 1 {
                 return; //we're staying in place
             }
 
@@ -88,9 +88,9 @@ export default function shader_simulation(
                 let offset = outgoingPossibilities[j];
                 let i_in = cellIndex(getOffset(cell.xy, -offset));
                 //if receiving intent, accept it
-                if neighbourhood_intent[mooreIndex(i_in, offset)] == 1 {
-                    neighbourhood_intent[mooreIndex(i_in, offset)] = 0;
-                    neighbourhood_maintain[mooreIndex(i, -offset)] = 1;
+                if neighbourhood_intent[mooreIndex(i_in, offset)].state == 1 {
+                    neighbourhood_maintain[mooreIndex(i, -offset)] = neighbourhood_intent[mooreIndex(i_in, offset)];
+                    neighbourhood_intent[mooreIndex(i_in, offset)].state = 0;
                     return;
                 }
             }            
@@ -105,13 +105,29 @@ export default function shader_simulation(
             let i = cellIndex(cell.xy);
 
             //sum leftover outgoing intent and accepted incoming intent
-            var sum = neighbourhood_intent[mooreIndex(i, vec2i(0,0))];
+            var sum = neighbourhood_intent[mooreIndex(i, vec2i(0,0))].state;
+            var colour = select(vec4f(), neighbourhood_intent[mooreIndex(i, vec2i(0,0))].colour, neighbourhood_intent[mooreIndex(i, vec2i(0,0))].state == 1);
             for (var j = 0; j < numPossibilities; j++) {
                 let offset = outgoingPossibilities[j];
-                sum += neighbourhood_intent[mooreIndex(i, offset)];
-                sum += neighbourhood_maintain[mooreIndex(i, -offset)];
+                sum += neighbourhood_intent[mooreIndex(i, offset)].state;
+                colour += select(vec4f(), neighbourhood_intent[mooreIndex(i, offset)].colour, neighbourhood_intent[mooreIndex(i, offset)].state == 1);
+                sum += neighbourhood_maintain[mooreIndex(i, -offset)].state;
+                colour += select(vec4f(), neighbourhood_maintain[mooreIndex(i, -offset)].colour, neighbourhood_maintain[mooreIndex(i, -offset)].state == 1);
             }
-            cellStateOut[i] = sum;
+
+            //if mouse is within 2 blocks, make sand even if is not
+            var max_mouse_dist = 1.0;
+            let dist = length(abs(mouse_data.pos * vec2f(grid) - vec2f(cell.xy)));
+            if (sum == 0 && mouse_data.down == 1 && dist < max_mouse_dist) {
+                sum = 1;
+                // colour = vec4f((sin(time * 0.000)+1)/2, (cos(time * 0.001)+1)/2, (cos(sin(time * 0.000001)*900)+1)/2, 1);
+                colour = vec4f(sin(time*0.0000), cos(time*0.01), cos(sin(time*0.01)), 1);
+            }
+
+
+
+            cellStateOut[i] = Pixel(sum, colour);
+            
         }
     `;
 }

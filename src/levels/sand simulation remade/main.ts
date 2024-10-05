@@ -12,7 +12,7 @@ import { Pane } from "tweakpane";
 import { BindingApi, FolderApi } from "@tweakpane/core";
 import shader_vertex_fragment from "./shaders/shader_vertex_fragment";
 
-const GRID_SIZE = 256;
+const GRID_SIZE = 128;
 const UPDATE_INTERVAL_MS = (fps) => 1000 / fps;
 const WORKGROUP_SIZE = 4;
 const LOG_EVERY_X_FRAMES = 120;
@@ -27,6 +27,7 @@ const SIM_PARAMS = {
 };
 
 var mousePosition = [-1, -1];
+var mouseDown = false;
 
 async function sand_run_remake(
     canvas: HTMLCanvasElement,
@@ -146,12 +147,13 @@ async function sand_run_remake(
 
     const shaderDataUsages: { [key: string]: number } = {
         grid: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        time: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         cellStateIn: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         cellStateOut: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         neighbourhood_intent: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         neighbourhood_maintain:
             GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-        mouse_pos: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        mouse_data: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         simulationVisualsIn: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         simulationVisualsOut: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         updatesInFrame: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -160,6 +162,7 @@ async function sand_run_remake(
     console.log(shaderDataUsages);
 
     shaderDataObjects.grid.set([GRID_SIZE, GRID_SIZE]);
+    shaderDataObjects.time.set(window.performance.now());
     const cellStartData = Array(GRID_SIZE * GRID_SIZE);
     // for (let x = 0; x < GRID_SIZE; x++) {
     //     cellStartData[(GRID_SIZE - 1) * GRID_SIZE + x] = 1;
@@ -174,16 +177,16 @@ async function sand_run_remake(
     //     }
     // }
 
-    for (let i = 0; i < GRID_SIZE * GRID_SIZE; ++i) {
-        const x = i % GRID_SIZE;
-        const y = i / GRID_SIZE;
-        const distFromMiddle =
-            Math.abs(x - GRID_SIZE / 2) + Math.abs(y - GRID_SIZE / 2);
-        cellStartData[i] = Math.random() > distFromMiddle / GRID_SIZE ? 1 : 0;
-    }
+    // for (let i = 0; i < GRID_SIZE * GRID_SIZE; ++i) {
+    //     const x = i % GRID_SIZE;
+    //     const y = i / GRID_SIZE;
+    //     const distFromMiddle =
+    //         Math.abs(x - GRID_SIZE / 2) + Math.abs(y - GRID_SIZE / 2);
+    //     cellStartData[i] = Math.random() > distFromMiddle / GRID_SIZE ? 1 : 0;
+    // }
 
     shaderDataObjects["cellStateIn"].set(cellStartData);
-    shaderDataObjects["mouse_pos"].set(mousePosition);
+    shaderDataObjects["mouse_data"].set({ pos: mousePosition, down: false });
 
     shaderDataObjects["simulationVisualsIn"].set(
         new Array(GRID_SIZE * GRID_SIZE).fill([0, 0, 0, 0])
@@ -236,6 +239,11 @@ async function sand_run_remake(
                 buffer: {}, // Grid uniform buffer
             },
             {
+                binding: shaderDefs.uniforms["time"].binding,
+                visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
+                buffer: {}, // time uniform buffer
+            },
+            {
                 binding: shaderDefs.storages["cellStateIn"].binding,
                 visibility:
                     GPUShaderStage.VERTEX |
@@ -259,7 +267,7 @@ async function sand_run_remake(
                 buffer: { type: "storage" }, //keeping temp
             },
             {
-                binding: shaderDefs.uniforms["mouse_pos"].binding,
+                binding: shaderDefs.uniforms["mouse_data"].binding,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {},
             },
@@ -312,6 +320,10 @@ async function sand_run_remake(
                     resource: { buffer: shaderDataBuffers.grid },
                 },
                 {
+                    binding: shaderDefs.uniforms["time"].binding,
+                    resource: { buffer: shaderDataBuffers.time },
+                },
+                {
                     binding: shaderDefs.storages["cellStateIn"].binding,
                     resource: { buffer: shaderDataBuffers.cellStateIn },
                 },
@@ -334,8 +346,8 @@ async function sand_run_remake(
                     },
                 },
                 {
-                    binding: shaderDefs.uniforms["mouse_pos"].binding,
-                    resource: { buffer: shaderDataBuffers.mouse_pos },
+                    binding: shaderDefs.uniforms["mouse_data"].binding,
+                    resource: { buffer: shaderDataBuffers.mouse_data },
                 },
                 {
                     binding: shaderDefs.storages["simulationVisualsIn"].binding,
@@ -371,6 +383,10 @@ async function sand_run_remake(
                     resource: { buffer: shaderDataBuffers.grid },
                 },
                 {
+                    binding: shaderDefs.uniforms["time"].binding,
+                    resource: { buffer: shaderDataBuffers.time },
+                },
+                {
                     binding: shaderDefs.storages["cellStateIn"].binding,
                     resource: { buffer: shaderDataBuffers.cellStateOut },
                 },
@@ -393,8 +409,8 @@ async function sand_run_remake(
                     },
                 },
                 {
-                    binding: shaderDefs.uniforms["mouse_pos"].binding,
-                    resource: { buffer: shaderDataBuffers.mouse_pos },
+                    binding: shaderDefs.uniforms["mouse_data"].binding,
+                    resource: { buffer: shaderDataBuffers.mouse_data },
                 },
                 {
                     binding: shaderDefs.storages["simulationVisualsIn"].binding,
@@ -491,6 +507,12 @@ async function sand_run_remake(
             1 - (ev.pageY - canvas.offsetTop) / canvas.height,
         ];
     });
+    canvas.addEventListener("mousedown", (ev) => {
+        mouseDown = true;
+    });
+    canvas.addEventListener("mouseup", (ev) => {
+        mouseDown = false;
+    });
 
     let simulationStep = 0;
     var previousFrameTime = window.performance.now();
@@ -512,8 +534,21 @@ async function sand_run_remake(
         const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
         const computePass = encoder.beginComputePass();
 
-        const mouseData = new Float32Array(mousePosition);
-        device.queue.writeBuffer(shaderDataBuffers.mouse_pos, 0, mouseData);
+        device.queue.writeBuffer(
+            shaderDataBuffers.time,
+            0,
+            new Float32Array([window.performance.now()])
+        );
+
+        shaderDataObjects["mouse_data"].set({
+            pos: mousePosition,
+            down: mouseDown ? 1 : 0,
+        });
+        device.queue.writeBuffer(
+            shaderDataBuffers.mouse_data,
+            0,
+            shaderDataObjects["mouse_data"].arrayBuffer
+        );
         const updates = SIM_PARAMS["updates / frame"];
 
         if (updates > 0) {

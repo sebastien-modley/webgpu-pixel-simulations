@@ -15,8 +15,8 @@ export default function shader_visuals(WORKGROUP_SIZE: number): string {
                 //setup
                 let frameUpdateCount = updatesInFrame[bindingTag%updatesInFrameArraySize];
                 let i = cellIndex(cell.xy);
-                let state = cellStateIn[i];
-                var colour = select(vec4f(0), vec4f(1), state>0);
+                let pixel = cellStateIn[i];
+                var colour = select(vec4f(0), pixel.colour, pixel.state>0);
                 simulationVisualsOut[i] = colour * (1 / f32(frameUpdateCount+1)) + simulationVisualsIn[i] * (f32(frameUpdateCount) / f32(frameUpdateCount+1));
                 updatesInFrame[(bindingTag+1)%updatesInFrameArraySize] = frameUpdateCount + 1;
             }

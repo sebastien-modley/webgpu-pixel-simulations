@@ -69,6 +69,7 @@ let FIRE_COLOUR_PARAMS: {
 };
 
 var mousePosition = [-1, -1];
+var mouseDown = false;
 
 async function run(
     canvas: HTMLCanvasElement,
@@ -394,7 +395,7 @@ async function run(
         //         };
         //     })
         // ),
-        mouse_pos: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        mouse_data: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         fireColourCheckpointsCount:
             GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         fireColourCheckpoints: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -426,7 +427,7 @@ async function run(
     }
 
     shaderDataObjects["cellStateIn"].set(cellStartData);
-    shaderDataObjects["mouse_pos"].set(mousePosition);
+    shaderDataObjects["mouse_data"].set({ pos: mousePosition, down: false });
     shaderDataObjects["fireColourCheckpointsCount"].set(
         FIRE_COLOUR_PARAMS.maxCount
     );
@@ -515,7 +516,7 @@ async function run(
             {
                 binding: shaderDefs.uniforms["fireBehaviour"].binding,
                 visibility: GPUShaderStage.COMPUTE,
-                buffer: {}, // time uniform buffer
+                buffer: {},
             },
             // ...Object.keys(PANE_FIRE_BEHAVIOUR_PARAMS).map((key) => {
             //     return {
@@ -529,7 +530,7 @@ async function run(
             // }),
 
             {
-                binding: shaderDefs.uniforms["mouse_pos"].binding,
+                binding: shaderDefs.uniforms["mouse_data"].binding,
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {},
             },
@@ -638,8 +639,8 @@ async function run(
                 // }),
 
                 {
-                    binding: shaderDefs.uniforms["mouse_pos"].binding,
-                    resource: { buffer: shaderDataBuffers.mouse_pos },
+                    binding: shaderDefs.uniforms["mouse_data"].binding,
+                    resource: { buffer: shaderDataBuffers.mouse_data },
                 },
                 {
                     binding:
@@ -736,8 +737,8 @@ async function run(
                 // }),
 
                 {
-                    binding: shaderDefs.uniforms["mouse_pos"].binding,
-                    resource: { buffer: shaderDataBuffers.mouse_pos },
+                    binding: shaderDefs.uniforms["mouse_data"].binding,
+                    resource: { buffer: shaderDataBuffers.mouse_data },
                 },
                 {
                     binding:
@@ -849,6 +850,12 @@ async function run(
             1 - (ev.pageY - canvas.offsetTop) / canvas.height,
         ];
     });
+    canvas.addEventListener("mousedown", (ev) => {
+        mouseDown = true;
+    });
+    canvas.addEventListener("mouseup", (ev) => {
+        mouseDown = false;
+    });
 
     let simulationStep = 0;
     var previousFrameTime = window.performance.now();
@@ -873,8 +880,15 @@ async function run(
         const timeData = new Float32Array([window.performance.now()]);
         device.queue.writeBuffer(shaderDataBuffers.time, 0, timeData);
 
-        const mouseData = new Float32Array(mousePosition);
-        device.queue.writeBuffer(shaderDataBuffers.mouse_pos, 0, mouseData);
+        shaderDataObjects["mouse_data"].set({
+            pos: mousePosition,
+            down: mouseDown ? 1 : 0,
+        });
+        device.queue.writeBuffer(
+            shaderDataBuffers.mouse_data,
+            0,
+            shaderDataObjects["mouse_data"].arrayBuffer
+        );
 
         shaderDataObjects["fireColourCheckpointsCount"].set(
             FIRE_COLOUR_PARAMS.count

@@ -1,7 +1,7 @@
 import { StatLogger } from "../../utils/StatLogger";
 
-const GRID_SIZE = 1024;
-const UPDATE_INTERVAL = 16.6667; //ms
+const GRID_SIZE = 256;
+const UPDATE_INTERVAL = 16.6667 / 100; //ms
 const WORKGROUP_SIZE = 8;
 
 function run(
@@ -96,7 +96,8 @@ function run(
             @fragment
             fn fragmentMain(@location(0) cell: vec2f) -> @location(0) vec4f {
                 let rg = cell/grid;
-                return vec4f(rg,1-rg.x,1);
+                // return vec4f(rg,1-rg.x,1);
+                return vec4f(1,1,1,1);
             }
         `,
     });
@@ -289,7 +290,7 @@ function run(
                     view: context.getCurrentTexture().createView(),
                     loadOp: "clear",
                     storeOp: "store",
-                    clearValue: [0, 0, 0.4, 1], //background color
+                    clearValue: [0, 0, 0, 1], //background color
                 },
             ],
         });

@@ -46,7 +46,11 @@ export const shader_data = /* wgsl */ `
     // @group(0) @binding(${++binding}) var<uniform> FIRE_BEHAVIOUR__spread: f32;
 
 
-    @group(0) @binding(${++binding}) var<uniform> mouse_pos: vec2f;
+    struct Mouse_Data {
+        pos: vec2f,
+        down: u32
+    };
+    @group(0) @binding(${++binding}) var<uniform> mouse_data: Mouse_Data;
 
     @group(0) @binding(${++binding}) var<uniform> fireColourCheckpointsCount: i32;
     @group(0) @binding(${++binding}) var<storage> fireColourCheckpoints: array<ColourCheckpoint>;
