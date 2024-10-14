@@ -82,7 +82,7 @@ export default function shader_visuals(): string {
                 vec4f(1f, 1f, 1f, 1f), 
             );
             const checkPoints = array<f32, checkPointCount-1>(
-                12, 16, 19, 24, 32, 36
+                12, 16, 19, 24, 32, 1000
             );
 
             if (state < checkPoints[0]) {return vec4f();}

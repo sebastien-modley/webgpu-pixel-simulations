@@ -121,7 +121,7 @@ export default function shader_simulation(
             if (sum == 0 && mouse_data.down == 1 && dist < max_mouse_dist) {
                 sum = 1;
                 // colour = vec4f((sin(time * 0.000)+1)/2, (cos(time * 0.001)+1)/2, (cos(sin(time * 0.000001)*900)+1)/2, 1);
-                colour = vec4f(sin(time*0.0000), cos(time*0.01), cos(sin(time*0.01)), 1);
+                colour = vec4f(sin(time*0.1)*0.3, cos(time*0.001), cos(sin(time*0.001)), 1);
             }
 
 

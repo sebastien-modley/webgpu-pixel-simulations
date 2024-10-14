@@ -376,7 +376,7 @@ function run(
                         view: context.getCurrentTexture().createView(),
                         loadOp: "clear",
                         storeOp: "store",
-                        clearValue: [0, 0, 0.4, 1], //background color
+                        clearValue: [0, 0, 0, 1], //background color
                     },
                 ],
             });
